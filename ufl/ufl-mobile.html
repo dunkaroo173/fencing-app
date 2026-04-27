@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>UFL Fencing</title>
+<style>
+:root{
+  --bg:#07080c;--s1:#0d0f16;--s2:#141720;
+  --border:#252a38;
+  --L:#00c7ff;--L2:rgba(0,199,255,0.18);--L3:rgba(0,199,255,0.7);
+  --R:#e62600;--R2:rgba(230,38,0,0.18);--R3:rgba(230,38,0,0.7);
+  --gold:#f5c842;--green:#3de87a;--warn:#f5a623;
+  --text:#d0d6e8;--muted:#6a738a;
+  --mono:'Share Tech Mono',monospace;
+  --head:'Exo 2',sans-serif;
+  --body:'Rajdhani',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--body)}
+button{cursor:pointer;border:none;background:none;color:inherit;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#portrait-overlay{display:none;position:absolute;inset:0;background:#000;z-index:9999;align-items:center;justify-content:center;font-size:16px;letter-spacing:2px;color:#fff;font-family:monospace;pointer-events:none}
+#portrait-overlay.on{display:flex;pointer-events:none}
+.app-root{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+
+/* ── SCREEN 0: SETUP ── */
+#s-setup{flex-direction:row;background:linear-gradient(135deg,#07080c 60%,#0a0e18)}
+.setup-col{width:140px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:20px 10px;position:relative;overflow:hidden}
+.setup-col.left{background:linear-gradient(180deg,var(--L3) 0%,rgba(0,199,255,0.04) 100%)}
+.setup-col.right{background:linear-gradient(180deg,var(--R3) 0%,rgba(230,38,0,0.04) 100%)}
+.setup-avatar{width:70px;height:70px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:30px}
+.setup-name-input{margin-top:10px;width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 6px;color:#fff;font-family:var(--head);font-size:13px;font-weight:600;text-align:center;outline:none}
+.setup-side-tag{margin-top:auto;width:100%;padding:12px 0;text-align:center;font-family:var(--head);font-weight:700;font-size:15px;color:#fff;border-radius:6px}
+.setup-col.left .setup-side-tag{background:linear-gradient(90deg,rgba(10,67,255,0.1),var(--L))}
+.setup-col.right .setup-side-tag{background:linear-gradient(90deg,var(--R),rgba(159,25,3,0.1))}
+.setup-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 10px}
+.setup-score{font-family:var(--head);font-weight:800;font-size:36px;color:#fff;letter-spacing:6px}
+.setup-opts{display:flex;flex-direction:column;gap:10px;width:100%}
+.opt-row{display:flex;align-items:center;gap:8px;justify-content:center}
+.opt-label{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:60px;text-align:right}
+.chip-row{display:flex;gap:6px}
+.chip{padding:7px 14px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--muted);background:rgba(255,255,255,0);transition:all .15s;min-width:44px;text-align:center}
+.chip.active{background:rgba(255,255,255,0.45);color:#fff;border-color:rgba(255,255,255,0.4)}
+.setup-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:220px}
+.rnd{width:100%;padding:14px;border-radius:28px;font-family:var(--body);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:none;transition:all .12s}
+.rnd:active{transform:scale(0.96)}
+.rnd-start{background:#0a39d4;color:#fff}
+.rnd-end{background:#111;color:#fff;border:1px solid var(--border)}
+.rnd-red{background:#a82e15;color:#fff}
+.rnd-grey{background:#444;color:#fff}
+.rnd-blue{background:#0a39d4;color:#fff}
+
+/* ── SCREEN 1: MATCH ── */
+#s-match{background:var(--bg)}
+.hud{height:58px;flex-shrink:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;padding:0 10px;gap:6px;clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 100%,0 100%)}
+.hud-av{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.hud-info{flex:1;min-width:0;display:flex;flex-direction:column}
+.hud-name{font-family:var(--head);font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud-hp{height:5px;background:var(--s2);border-radius:2px;margin-top:3px;overflow:hidden}
+.hud-hp-fill{height:100%;border-radius:2px;transition:width .35s}
+.hud-pts{font-family:var(--head);font-weight:800;font-size:22px;min-width:26px;text-align:center;flex-shrink:0}
+.timer-wrap{display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:0 6px}
+.timer-num{font-family:var(--mono);font-size:20px;color:var(--gold);letter-spacing:3px;line-height:1}
+.timer-num.warn{color:var(--R);animation:blink .5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.period-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px}
+.priority-badge{font-size:9px;background:var(--gold);color:#000;padding:1px 4px;border-radius:2px;font-family:var(--mono);font-weight:bold;display:none;margin-left:4px}
+.priority-badge.on{display:inline}
+.operate{flex:1;position:relative;overflow:hidden}
+.cards-strip{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;padding:6px 12px;pointer-events:none;z-index:5}
+.cards-l,.cards-r{display:flex;gap:4px;align-items:center;font-size:18px}
+.cards-r{margin-left:auto;flex-direction:row-reverse}
+.hint-center{flex:1;display:flex;justify-content:center}
+.hint-pill{background:rgba(0,0,0,0.8);border:1px solid var(--border);padding:7px 18px;border-radius:20px;font-family:var(--head);font-weight:600;font-size:14px;color:#fff;display:none;max-width:280px;text-align:center}
+.hint-pill.on{display:block}
+.act-btn{position:absolute;width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid;transition:transform .1s}
+.act-btn:active{transform:scale(0.9)}
+.act-left{bottom:28px;left:36px;border-color:var(--L);background:var(--L2)}
+.act-right{bottom:28px;right:36px;border-color:var(--R);background:var(--R2)}
+.sec-btn{position:absolute;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:1.5px solid;transition:transform .1s}
+.sec-btn:active{transform:scale(0.9)}
+.foul-left{bottom:120px;left:54px;border-color:#ffaa00;background:rgba(255,170,0,0.12)}
+.foul-right{bottom:120px;right:54px;border-color:#ffaa00;background:rgba(255,170,0,0.12)}
+.chal-left{bottom:92px;left:12px;border-color:#00ffee;background:rgba(0,255,238,0.08);width:42px;height:42px;font-size:16px}
+.chal-right{bottom:92px;right:12px;border-color:#00ffee;background:rgba(0,255,238,0.08);width:42px;height:42px;font-size:16px}
+.mid-btn{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);padding:12px 28px;border-radius:24px;font-family:var(--body);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+#pause-btn{background:var(--R2);color:var(--R);border:1.5px solid var(--R)}
+#resume-btn{background:#0a39d4;color:#fff;display:none}
+.confirm-wrap{position:absolute;bottom:70px;display:none;flex-direction:column;gap:10px;align-items:center;z-index:30}
+.confirm-wrap.on{display:flex}
+.confirm-wrap.left-side{left:16px}
+.confirm-wrap.right-side{right:16px}
+.mark-circle{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,0.1);border:1.5px solid var(--border);font-size:20px;display:flex;align-items:center;justify-content:center;align-self:flex-end}
+.confirm-wrap.right-side .mark-circle{align-self:flex-start}
+.conf-btn{width:150px;padding:13px 0;border-radius:24px;font-family:var(--body);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-align:center;transition:transform .1s}
+.conf-btn:active{transform:scale(0.96)}
+.conf-cancel{background:#111;color:#fff;border:1.5px solid #333}
+.conf-confirm{background:#0a39d4;color:#fff}
+
+/* ── PIE MENU ── */
+.pie-wrap{position:absolute;inset:0;display:none;align-items:flex-end;z-index:25;background:rgba(0,0,0,0.35)}
+.pie-wrap.on{display:flex}
+.pie-wrap.pie-left{justify-content:flex-start;padding:0 0 18px 10px}
+.pie-wrap.pie-right{justify-content:flex-end;padding:0 10px 18px 0}
+.pie-canvas-wrap{position:relative;width:220px;height:220px}
+.pie-canvas-wrap canvas{position:absolute;top:0;left:0}
+.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:88px;height:88px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:12px;font-weight:700;color:#fff;text-align:center;padding:4px;pointer-events:none;z-index:5}
+.pie-close{position:absolute;top:-12px;width:36px;height:36px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;z-index:6}
+.pie-wrap.pie-left .pie-close{right:-12px}
+.pie-wrap.pie-right .pie-close{left:-12px}
+
+/* ── SCREEN 2: RESULT ── */
+#s-result{flex-direction:column;background:var(--bg);justify-content:space-between;padding:16px}
+.result-topbar{display:flex;justify-content:space-between;align-items:center}
+.result-main{display:flex;justify-content:center;align-items:center;gap:30px;flex:1}
+.res-fencer{display:flex;flex-direction:column;align-items:center;gap:8px}
+.res-av{width:60px;height:60px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:26px}
+.res-name{font-family:var(--head);font-size:15px;font-weight:600;color:#fff;text-align:center}
+.res-scorebox{text-align:center}
+.res-score-lbl{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px}
+.res-score-num{font-family:var(--head);font-weight:800;font-size:44px;color:#fff;letter-spacing:8px;line-height:1}
+.result-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ── SCREEN 3: EVENTS ── */
+#s-events{background:rgba(0,0,0,0.9);flex-direction:row}
+.ev-side{width:80px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 6px}
+.ev-side-name{font-family:var(--head);font-size:12px;font-weight:600;text-align:center;margin-top:8px}
+.ev-side-tag{margin-top:auto;width:100%;padding:10px 0;text-align:center;font-family:var(--head);font-weight:700;font-size:13px;color:#fff;border-radius:4px}
+.ev-main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.ev-divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.15)}
+.ev-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 0}
+.ev-item{padding:8px 10px;display:flex;align-items:stretch}
+.ev-bubble{border-radius:10px;padding:7px 12px;display:flex;gap:6px;align-items:center}
+.ev-bubble.ev-l{background:linear-gradient(90deg,#0a386d,var(--L));border-top-right-radius:0;flex:1;margin-right:24px}
+.ev-bubble.ev-r{background:linear-gradient(90deg,var(--R),#5c1a0a);border-top-left-radius:0;flex:1;margin-left:24px;flex-direction:row-reverse}
+.ev-bubble.ev-c{background:linear-gradient(90deg,var(--L),var(--R));margin:0 20px;width:100%}
+.ev-ts{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.7);flex-shrink:0}
+.ev-hint{font-family:var(--body);font-size:12px;color:#fff;font-weight:500}
+.ev-btm{padding:12px;display:flex;justify-content:center;flex-shrink:0}
+
+/* ── SCREEN 4: COUNTDOWN ── */
+#s-countdown{align-items:center;justify-content:center;background:rgba(0,0,0,0.88)}
+.cd-num{font-family:var(--mono);font-size:96px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,0.6);line-height:1}
+.cd-sub{font-family:var(--mono);font-size:14px;color:var(--muted);margin-top:12px;letter-spacing:3px}
+
+/* ── DRAWER ── */
+.drawer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:50;display:none}
+.drawer-backdrop.on{display:block}
+.drawer{position:absolute;bottom:0;left:0;right:0;max-height:75vh;background:var(--s1);border-top:2px solid var(--border);border-radius:16px 16px 0 0;z-index:51;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s ease}
+.drawer.on{transform:translateY(0)}
+.drawer-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.dtab{flex:1;padding:12px 4px;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s}
+.dtab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.drawer-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.dpanel{display:none;padding:14px}
+.dpanel.active{display:block}
+.rpt-section{margin-bottom:16px}
+.rpt-head{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.rpt-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--s2);font-size:14px}
+.rpt-k{color:var(--muted)}.rpt-v{color:var(--text);font-weight:600}
+.exp-row{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.exp-btn{padding:13px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:var(--body);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border-radius:6px;text-align:center;transition:all .15s}
+.exp-btn:active{background:var(--s1)}
+.ai-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--s2);font-size:13px}
+.ai-ts{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:42px;flex-shrink:0}
+.ai-label{flex:1;line-height:1.3}
+.conf{font-family:var(--mono);font-size:10px;padding:2px 5px;border-radius:2px;flex-shrink:0}
+.conf-h{background:#00200f;color:var(--green)}.conf-m{background:#202000;color:var(--gold)}.conf-l{background:#200000;color:var(--R)}
+.stat-bar-r{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px}
+.stat-bar-l{color:var(--muted);min-width:120px;font-size:11px}
+.stat-bar-b{height:7px;background:var(--gold);border-radius:2px;transition:width .4s;min-width:2px}
+.stat-bar-n{font-family:var(--mono);font-size:11px;color:var(--text)}
+
+/* ── CAMERA ── */
+#cam-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.28;z-index:0;display:none;pointer-events:none}
+#cam-preview.on{display:block}
+.cam-btn{position:absolute;top:8px;right:8px;width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,0.6);border:1.5px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:10;cursor:pointer;transition:transform .1s}
+.cam-btn:active{transform:scale(0.9)}
+.cam-btn.recording{border-color:var(--R);background:rgba(230,38,0,0.3)}
+.rec-dot{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:none;align-items:center;gap:6px;background:rgba(0,0,0,0.7);border-radius:12px;padding:4px 10px;z-index:10}
+.rec-dot.on{display:flex}
+.rec-circle{width:9px;height:9px;border-radius:50%;background:#e62600;animation:recblink .9s infinite}
+@keyframes recblink{0%,100%{opacity:1}50%{opacity:.2}}
+.rec-label{font-family:var(--mono);font-size:11px;color:#fff;letter-spacing:1px}
+.fab{position:absolute;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-size:22px;z-index:40;box-shadow:0 4px 16px rgba(0,0,0,0.5);transition:transform .1s}
+.fab:active{transform:scale(0.93)}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:var(--s1)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="portrait-overlay">⟳ ROTATE DEVICE</div>
+<div class="app-root">
+
+<!-- ── SCREEN 0: SETUP ── -->
+<div id="s-setup" class="screen active">
+  <div class="setup-col left">
+    <div class="setup-avatar" id="av-l">🤺</div>
+    <input class="setup-name-input" id="name-l" type="text" maxlength="18" placeholder="LEFT FENCER" autocomplete="off" spellcheck="false">
+    <div class="setup-side-tag">LEFT</div>
+  </div>
+  <div class="setup-center">
+    <div class="setup-score" id="score-disp">0 — 0</div>
+    <div class="setup-opts">
+      <div class="opt-row">
+        <span class="opt-label">WEAPON</span>
+        <div class="chip-row">
+          <button class="chip active" data-group="wpn" data-val="foil">FOIL</button>
+          <button class="chip" data-group="wpn" data-val="epee">ÉPÉE</button>
+          <button class="chip" data-group="wpn" data-val="sabre">SABRE</button>
+        </div>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">PERIODS</span>
+        <div class="chip-row">
+          <button class="chip active" data-group="per" data-val="1">1</button>
+          <button class="chip" data-group="per" data-val="2">2</button>
+          <button class="chip" data-group="per" data-val="3">3</button>
+        </div>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">DURATION</span>
+        <div class="chip-row">
+          <button class="chip active" data-group="dur" data-val="3">3m</button>
+          <button class="chip" data-group="dur" data-val="5">5m</button>
+          <button class="chip" data-group="dur" data-val="9">9m</button>
+        </div>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">FORMAT</span>
+        <div class="chip-row">
+          <button class="chip active" data-group="fmt" data-val="DE">DE</button>
+          <button class="chip" data-group="fmt" data-val="poule">POULE</button>
+        </div>
+      </div>
+    </div>
+    <div class="setup-btns">
+      <button class="rnd rnd-start" id="btn-start">▶ START MATCH</button>
+      <button class="rnd rnd-end" id="btn-load">⬆ LOAD JSON</button>
+      <input type="file" id="file-input" accept=".json" style="display:none">
+    </div>
+  </div>
+  <div class="setup-col right">
+    <div class="setup-avatar" id="av-r">🤺</div>
+    <input class="setup-name-input" id="name-r" type="text" maxlength="18" placeholder="RIGHT FENCER" autocomplete="off" spellcheck="false">
+    <div class="setup-side-tag">RIGHT</div>
+  </div>
+</div>
+
+<!-- ── SCREEN 1: MATCH ── -->
+<div id="s-match" class="screen">
+  <!-- Camera preview (behind everything) -->
+  <video id="cam-preview" autoplay muted playsinline></video>
+
+  <!-- Top HUD -->
+  <div class="hud">
+    <div class="hud-av" id="hud-av-l">🤺</div>
+    <div class="hud-info">
+      <div class="hud-name" id="hud-name-l">LEFT</div>
+      <div class="hud-hp"><div class="hud-hp-fill" id="hud-hp-l" style="width:100%;background:var(--L)"></div></div>
+    </div>
+    <div class="hud-pts" id="hud-pts-l" style="color:var(--L)">0</div>
+    <div class="timer-wrap">
+      <div class="timer-num" id="timer-disp">3:00</div>
+      <div class="period-lbl" id="period-lbl">P1</div>
+    </div>
+    <div class="hud-pts" id="hud-pts-r" style="color:var(--R)">0</div>
+    <div class="hud-info" style="align-items:flex-end">
+      <div class="hud-name" id="hud-name-r" style="text-align:right">RIGHT</div>
+      <div class="hud-hp"><div class="hud-hp-fill" id="hud-hp-r" style="width:100%;background:var(--R)"></div></div>
+    </div>
+    <div class="hud-av" id="hud-av-r">🤺</div>
+  </div>
+
+  <!-- Operating area -->
+  <div class="operate" id="operate">
+    <!-- Cards strip -->
+    <div class="cards-strip">
+      <div class="cards-l" id="cards-l"></div>
+      <div class="hint-center"><div class="hint-pill" id="hint-pill"></div></div>
+      <div class="cards-r" id="cards-r"></div>
+    </div>
+    <!-- Recording dot -->
+    <div class="rec-dot" id="rec-dot">
+      <div class="rec-circle"></div>
+      <div class="rec-label">REC</div>
+    </div>
+    <!-- Camera button -->
+    <button class="cam-btn" id="cam-btn">📷</button>
+    <!-- Action buttons -->
+    <button class="act-btn act-left" id="btn-act-l">🤺</button>
+    <button class="act-btn act-right" id="btn-act-r">🤺</button>
+    <!-- Foul / challenge buttons -->
+    <button class="sec-btn foul-left" id="btn-foul-l" title="Foul L">🟡</button>
+    <button class="sec-btn foul-right" id="btn-foul-r" title="Foul R">🟡</button>
+    <button class="sec-btn chal-left" id="btn-chal-l" title="Video L">📹</button>
+    <button class="sec-btn chal-right" id="btn-chal-r" title="Video R">📹</button>
+    <!-- Pause / resume -->
+    <button class="mid-btn" id="pause-btn">⏸ PAUSE</button>
+    <button class="mid-btn" id="resume-btn">▶ RESUME</button>
+
+    <!-- Confirm overlays -->
+    <div class="confirm-wrap left-side" id="conf-l">
+      <div class="mark-circle" id="conf-l-icon">?</div>
+      <button class="conf-btn conf-confirm" id="conf-l-yes">✓ CONFIRM</button>
+      <button class="conf-btn conf-cancel" id="conf-l-no">✕ CANCEL</button>
+    </div>
+    <div class="confirm-wrap right-side" id="conf-r">
+      <div class="mark-circle" id="conf-r-icon">?</div>
+      <button class="conf-btn conf-confirm" id="conf-r-yes">✓ CONFIRM</button>
+      <button class="conf-btn conf-cancel" id="conf-r-no">✕ CANCEL</button>
+    </div>
+  </div>
+
+  <!-- Pie menus -->
+  <div class="pie-wrap pie-left" id="pie-l">
+    <div class="pie-canvas-wrap">
+      <canvas id="pie-canvas-l" width="220" height="220"></canvas>
+      <div class="pie-center" id="pie-center-l"></div>
+      <button class="pie-close" id="pie-close-l">✕</button>
+    </div>
+  </div>
+  <div class="pie-wrap pie-right" id="pie-r">
+    <div class="pie-canvas-wrap">
+      <canvas id="pie-canvas-r" width="220" height="220"></canvas>
+      <div class="pie-center" id="pie-center-r"></div>
+      <button class="pie-close" id="pie-close-r">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCREEN 2: RESULT / PAUSE ── -->
+<div id="s-result" class="screen">
+  <div class="result-topbar">
+    <span id="res-title" style="font-family:var(--head);font-size:18px;font-weight:700;color:#fff">MATCH PAUSED</span>
+    <span id="res-weapon" style="font-family:var(--mono);font-size:12px;color:var(--muted)">FOIL</span>
+  </div>
+  <div class="result-main">
+    <div class="res-fencer">
+      <div class="res-av">🤺</div>
+      <div class="res-name" id="res-name-l">LEFT</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="res-stats-l">—</div>
+    </div>
+    <div class="res-scorebox">
+      <div class="res-score-lbl">SCORE</div>
+      <div class="res-score-num"><span id="res-score-l" style="color:var(--L)">0</span> <span style="color:var(--muted)">:</span> <span id="res-score-r" style="color:var(--R)">0</span></div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)" id="res-period">PERIOD 1</div>
+    </div>
+    <div class="res-fencer">
+      <div class="res-av">🤺</div>
+      <div class="res-name" id="res-name-r">RIGHT</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="res-stats-r">—</div>
+    </div>
+  </div>
+  <div class="result-btns">
+    <button class="rnd rnd-blue" id="res-resume" style="min-width:120px">▶ RESUME</button>
+    <button class="rnd rnd-grey" id="res-events" style="min-width:120px">📋 EVENTS</button>
+    <button class="rnd rnd-red" id="res-end" style="min-width:120px">⏹ END MATCH</button>
+  </div>
+</div>
+
+<!-- ── SCREEN 3: EVENTS ── -->
+<div id="s-events" class="screen">
+  <div class="ev-side">
+    <div class="setup-avatar" style="width:44px;height:44px;font-size:22px">🤺</div>
+    <div class="ev-side-name" id="ev-name-l">LEFT</div>
+    <div class="ev-side-tag" style="background:var(--L2);color:var(--L)" id="ev-score-l">0</div>
+  </div>
+  <div class="ev-main">
+    <div class="ev-divider"></div>
+    <div class="ev-list" id="ev-list"></div>
+    <div class="ev-btm">
+      <button class="rnd rnd-grey" id="ev-back" style="min-width:140px;padding:10px">← BACK</button>
+    </div>
+  </div>
+  <div class="ev-side" style="align-items:flex-end">
+    <div class="setup-avatar" style="width:44px;height:44px;font-size:22px">🤺</div>
+    <div class="ev-side-name" id="ev-name-r">RIGHT</div>
+    <div class="ev-side-tag" style="background:var(--R2);color:var(--R)" id="ev-score-r">0</div>
+  </div>
+</div>
+
+<!-- ── SCREEN 4: COUNTDOWN ── -->
+<div id="s-countdown" class="screen">
+  <div class="cd-num" id="cd-num">3</div>
+  <div class="cd-sub">GET READY</div>
+</div>
+
+<!-- ── DRAWER ── -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-tabs">
+    <button class="dtab active" data-panel="report">REPORT</button>
+    <button class="dtab" data-panel="ai">AI REVIEW</button>
+    <button class="dtab" data-panel="stats">STATS</button>
+  </div>
+  <div class="drawer-body">
+    <!-- Report panel -->
+    <div class="dpanel active" id="panel-report">
+      <div class="rpt-section">
+        <div class="rpt-head">MATCH SUMMARY</div>
+        <div id="rpt-summary"></div>
+      </div>
+      <div class="rpt-section">
+        <div class="rpt-head">EXPORT</div>
+        <div class="exp-row">
+          <button class="exp-btn" id="exp-json">⬇ Export JSON</button>
+          <button class="exp-btn" id="exp-csv">⬇ Export CSV</button>
+          <button class="exp-btn" id="exp-txt">⬇ Export TXT</button>
+        </div>
+      </div>
+    </div>
+    <!-- AI panel -->
+    <div class="dpanel" id="panel-ai">
+      <div id="ai-list" style="padding-bottom:8px"></div>
+    </div>
+    <!-- Stats panel -->
+    <div class="dpanel" id="panel-stats">
+      <div id="stats-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FAB (opens drawer) -->
+<button class="fab" id="fab-btn" style="display:none">📊</button>
+
+</div><!-- .app-root -->
+
+<script>
+'use strict';
+// ── Action catalogue ─────────────────────────────────────────────────────────
+const ACTIONS = {
+  // Left fencer (100s)
+  100:{id:100,label:'Touch',emoji:'🎯',side:'L',isHit:true},
+  101:{id:101,label:'Flèche',emoji:'⚡',side:'L',isHit:true},
+  102:{id:102,label:'Parry-Riposte',emoji:'🛡️',side:'L',isHit:true},
+  103:{id:103,label:'Counter-Attack',emoji:'🔄',side:'L',isHit:true},
+  104:{id:104,label:'Compound',emoji:'🔀',side:'L',isHit:true},
+  105:{id:105,label:'Remise',emoji:'↩️',side:'L',isHit:true},
+  140:{id:140,label:'Off-Target',emoji:'🟡',side:'L',isHit:false},
+  141:{id:141,label:'Out of Bounds',emoji:'⬛',side:'L',isHit:false},
+  190:{id:190,label:'Yellow Card',emoji:'🟨',side:'L',isHit:false},
+  191:{id:191,label:'Red Card',emoji:'🟥',side:'L',isHit:false},
+  // Right fencer (200s)
+  200:{id:200,label:'Touch',emoji:'🎯',side:'R',isHit:true},
+  201:{id:201,label:'Flèche',emoji:'⚡',side:'R',isHit:true},
+  202:{id:202,label:'Parry-Riposte',emoji:'🛡️',side:'R',isHit:true},
+  203:{id:203,label:'Counter-Attack',emoji:'🔄',side:'R',isHit:true},
+  204:{id:204,label:'Compound',emoji:'🔀',side:'R',isHit:true},
+  205:{id:205,label:'Remise',emoji:'↩️',side:'R',isHit:true},
+  240:{id:240,label:'Off-Target',emoji:'🟡',side:'R',isHit:false},
+  241:{id:241,label:'Out of Bounds',emoji:'⬛',side:'R',isHit:false},
+  290:{id:290,label:'Yellow Card',emoji:'🟨',side:'R',isHit:false},
+  291:{id:291,label:'Red Card',emoji:'🟥',side:'R',isHit:false},
+  // Referee (single digits)
+  1:{id:1,label:'Halt',emoji:'✋',side:'C',isHit:false},
+  2:{id:2,label:'Corps-à-corps',emoji:'🤼',side:'C',isHit:false},
+  3:{id:3,label:'Video Review',emoji:'📹',side:'C',isHit:false},
+};
+
+// Pie menu definitions
+const MENU_MAIN   = 'MAIN';
+const MENU_SWORDS = 'SWORDS';
+const MENU_SHIELD = 'SHIELD';
+const MENU_CARD   = 'CARD';
+const MENU_OTHER  = 'OTHER';
+
+// Sectors per menu type (label, emoji, next menu or actionId offset)
+const PIE_SECTORS = {
+  [MENU_MAIN]: [
+    {label:'ATTACK',  emoji:'⚔️', next:MENU_SWORDS},
+    {label:'DEFENCE', emoji:'🛡️', next:MENU_SHIELD},
+    {label:'OTHER',   emoji:'🔄', next:MENU_OTHER},
+    {label:'CARD',    emoji:'🟨', next:MENU_CARD},
+  ],
+  [MENU_SWORDS]: [
+    {label:'Touch',         emoji:'🎯', offset:0},
+    {label:'Flèche',        emoji:'⚡', offset:1},
+    {label:'Parry-Rip.',    emoji:'🛡️', offset:2},
+    {label:'Counter',       emoji:'🔄', offset:3},
+    {label:'Compound',      emoji:'🔀', offset:4},
+    {label:'Remise',        emoji:'↩️', offset:5},
+  ],
+  [MENU_SHIELD]: [
+    {label:'Off-Target', emoji:'🟡', offset:40},
+    {label:'Out Bounds', emoji:'⬛', offset:41},
+  ],
+  [MENU_CARD]: [
+    {label:'Yellow',  emoji:'🟨', offset:90},
+    {label:'Red',     emoji:'🟥', offset:91},
+  ],
+  [MENU_OTHER]: [
+    {label:'Halt',       emoji:'✋', id:1},
+    {label:'Corps-corps',emoji:'🤼', id:2},
+    {label:'Video Rev.', emoji:'📹', id:3},
+  ],
+};
+
+// ── Match state ───────────────────────────────────────────────────────────────
+let M = null;
+let PS = {left:null, right:null}; // pending pie selection {menuType, side}
+
+function newMatchState(cfg) {
+  return {
+    nameL: cfg.nameL || 'LEFT',
+    nameR: cfg.nameR || 'RIGHT',
+    weapon: cfg.weapon || 'foil',
+    format: cfg.format || 'DE',
+    totalPeriods: cfg.periods || 1,
+    periodDuration: cfg.duration * 60 || 180,
+    period: 1,
+    scoreL: 0, scoreR: 0,
+    hpL: 100,  hpR: 100,
+    cardsL: [], cardsR: [],
+    timerSec: cfg.duration * 60 || 180,
+    running: false,
+    finished: false,
+    events: [],
+    startTime: null,
+    elapsedMs: 0,
+  };
+}
+
+// ── Screen helpers ────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function refreshHUD() {
+  if (!M) return;
+  document.getElementById('hud-name-l').textContent = M.nameL;
+  document.getElementById('hud-name-r').textContent = M.nameR;
+  document.getElementById('hud-pts-l').textContent  = M.scoreL;
+  document.getElementById('hud-pts-r').textContent  = M.scoreR;
+  const maxHP = 100;
+  document.getElementById('hud-hp-l').style.width = (M.hpL / maxHP * 100) + '%';
+  document.getElementById('hud-hp-r').style.width = (M.hpR / maxHP * 100) + '%';
+  const t = document.getElementById('timer-disp');
+  t.textContent = fmtTime(M.timerSec);
+  t.className   = 'timer-num' + (M.timerSec <= 30 ? ' warn' : '');
+  document.getElementById('period-lbl').textContent = `P${M.period}`;
+  // Cards
+  document.getElementById('cards-l').textContent = M.cardsL.join(' ');
+  document.getElementById('cards-r').textContent = M.cardsR.join(' ');
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+let _timerInterval = null;
+
+function startTimer() {
+  if (_timerInterval) return;
+  M.running = true;
+  _timerInterval = setInterval(() => {
+    if (!M.running) return;
+    if (M.timerSec > 0) {
+      M.timerSec--;
+      refreshHUD();
+    } else {
+      clearInterval(_timerInterval);
+      _timerInterval = null;
+      M.running = false;
+      endPeriod();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  M.running = false;
+}
+
+function endPeriod() {
+  if (M.period < M.totalPeriods) {
+    M.period++;
+    M.timerSec = M.periodDuration;
+    showResultScreen('END OF PERIOD ' + (M.period - 1));
+  } else {
+    finishMatch();
+  }
+}
+
+function finishMatch() {
+  stopTimer();
+  M.finished = true;
+  const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
+  showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
+  document.getElementById('res-resume').style.display = 'none';
+  document.getElementById('fab-btn').style.display = 'flex';
+}
+
+// ── Countdown ─────────────────────────────────────────────────────────────────
+function runCountdown(cb) {
+  showScreen('s-countdown');
+  let n = 3;
+  document.getElementById('cd-num').textContent = n;
+  const iv = setInterval(() => {
+    n--;
+    if (n > 0) {
+      document.getElementById('cd-num').textContent = n;
+    } else {
+      clearInterval(iv);
+      cb();
+    }
+  }, 900);
+}
+
+// ── Start / Resume ────────────────────────────────────────────────────────────
+function clickStart() {
+  const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
+  const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
+  M = newMatchState({ nameL, nameR, ...CFG });
+  refreshHUD();
+  document.getElementById('hud-name-l').textContent = nameL;
+  document.getElementById('hud-name-r').textContent = nameR;
+  runCountdown(() => {
+    showScreen('s-match');
+    document.getElementById('pause-btn').style.display  = 'block';
+    document.getElementById('resume-btn').style.display = 'none';
+    startTimer();
+  });
+}
+
+document.getElementById('btn-start').addEventListener('touchend', e => {
+  e.preventDefault(); clickStart();
+}, {passive:false});
+
+// ── Result / Pause screen ─────────────────────────────────────────────────────
+function showResultScreen(title) {
+  document.getElementById('res-title').textContent  = title;
+  document.getElementById('res-weapon').textContent = (M.weapon || 'FOIL').toUpperCase();
+  document.getElementById('res-name-l').textContent = M.nameL;
+  document.getElementById('res-name-r').textContent = M.nameR;
+  document.getElementById('res-score-l').textContent = M.scoreL;
+  document.getElementById('res-score-r').textContent = M.scoreR;
+  document.getElementById('res-period').textContent  = 'PERIOD ' + M.period;
+  document.getElementById('res-stats-l').textContent =
+    `H:${M.events.filter(e=>e.side==='L'&&e.isHit).length} ` +
+    `Cards:${M.cardsL.length}`;
+  document.getElementById('res-stats-r').textContent =
+    `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
+    `Cards:${M.cardsR.length}`;
+  document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
+  showScreen('s-result');
+}
+
+document.getElementById('pause-btn').addEventListener('touchend', e => {
+  e.preventDefault();
+  stopTimer();
+  showResultScreen('MATCH PAUSED');
+}, {passive:false});
+
+document.getElementById('res-resume').addEventListener('touchend', e => {
+  e.preventDefault();
+  showScreen('s-match');
+  startTimer();
+}, {passive:false});
+
+document.getElementById('resume-btn').addEventListener('touchend', e => {
+  e.preventDefault();
+  showScreen('s-match');
+  startTimer();
+}, {passive:false});
+
+document.getElementById('res-events').addEventListener('touchend', e => {
+  e.preventDefault();
+  renderEventsList();
+  showScreen('s-events');
+}, {passive:false});
+
+document.getElementById('res-end').addEventListener('touchend', e => {
+  e.preventDefault();
+  stopTimer();
+  finishMatch();
+}, {passive:false});
+
+document.getElementById('ev-back').addEventListener('touchend', e => {
+  e.preventDefault();
+  showScreen(M && M.finished ? 's-result' : 's-match');
+}, {passive:false});
+
+// ── Pie menu ──────────────────────────────────────────────────────────────────
+function drawPie(side, menuType) {
+  const canvasId = side === 'L' ? 'pie-canvas-l' : 'pie-canvas-r';
+  const centerId = side === 'L' ? 'pie-center-l' : 'pie-center-r';
+  const canvas   = document.getElementById(canvasId);
+  const ctx      = canvas.getContext('2d');
+  const cx = 110, cy = 110, outerR = 105, innerR = 44;
+  const sectors  = PIE_SECTORS[menuType] || [];
+  const n        = sectors.length;
+  const arc      = (2 * Math.PI) / n;
+  ctx.clearRect(0, 0, 220, 220);
+
+  const sideColor = side === 'L' ? '#00c7ff' : '#e62600';
+  const sideColor2= side === 'L' ? 'rgba(0,199,255,0.25)' : 'rgba(230,38,0,0.25)';
+
+  sectors.forEach((sec, i) => {
+    const startA = -Math.PI / 2 + arc * i - arc * 0.02;
+    const endA   = startA + arc * 0.96 + arc * 0.02;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, outerR, startA + arc * 0.02, endA - arc * 0.02);
+    ctx.closePath();
+    ctx.fillStyle   = sideColor2;
+    ctx.strokeStyle = sideColor;
+    ctx.lineWidth   = 1.5;
+    ctx.fill();
+    ctx.stroke();
+
+    // emoji + label
+    const midA  = startA + arc / 2 + arc * 0.02;
+    const labelR = (outerR + innerR) / 2;
+    const ex = cx + Math.cos(midA) * (labelR - 6);
+    const ey = cy + Math.sin(midA) * (labelR - 6);
+    ctx.font = '20px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(sec.emoji, ex, ey - 8);
+    ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillText(sec.label.toUpperCase().substring(0,8), ex, ey + 10);
+  });
+
+  // Inner ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
+  ctx.fillStyle = '#07080c';
+  ctx.fill();
+  ctx.strokeStyle = sideColor;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  document.getElementById(centerId).textContent = menuType === MENU_MAIN ? 'SELECT\nACTION' : '← BACK';
+}
+
+function openPie(side) {
+  stopTimer();
+  const wrapId = side === 'L' ? 'pie-l' : 'pie-r';
+  PS[side === 'L' ? 'left' : 'right'] = { menuType: MENU_MAIN };
+  drawPie(side, MENU_MAIN);
+  document.getElementById(wrapId).classList.add('on');
+}
+
+function closePie(side) {
+  const wrapId = side === 'L' ? 'pie-l' : 'pie-r';
+  document.getElementById(wrapId).classList.remove('on');
+  PS[side === 'L' ? 'left' : 'right'] = null;
+  if (!M.finished) startTimer();
+}
+
+function sectorAtPoint(x, y, n, cx, cy, outerR, innerR) {
+  const dx = x - cx, dy = y - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < innerR || dist > outerR) return -1;
+  const arc = (2 * Math.PI) / n;
+  let angle = Math.atan2(dy, dx) + Math.PI / 2;
+  if (angle < 0) angle += 2 * Math.PI;
+  return Math.floor(angle / arc) % n;
+}
+
+function handlePieTap(e, side) {
+  e.preventDefault();
+  const psKey  = side === 'L' ? 'left' : 'right';
+  const ps     = PS[psKey];
+  if (!ps) return;
+  const canvasId = side === 'L' ? 'pie-canvas-l' : 'pie-canvas-r';
+  const canvas   = document.getElementById(canvasId);
+  const rect     = canvas.getBoundingClientRect();
+  const touch    = e.changedTouches[0];
+  const rawX     = touch.clientX - rect.left;
+  const rawY     = touch.clientY - rect.top;
+  const scaleX   = 220 / rect.width;
+  const scaleY   = 220 / rect.height;
+  const x = rawX * scaleX, y = rawY * scaleY;
+
+  const sectors = PIE_SECTORS[ps.menuType] || [];
+  const idx     = sectorAtPoint(x, y, sectors.length, 110, 110, 105, 44);
+  if (idx < 0) return;
+  const sec = sectors[idx];
+
+  // Centre tap = back
+  const dx = x - 110, dy = y - 110;
+  if (Math.sqrt(dx*dx+dy*dy) < 44) {
+    if (ps.menuType !== MENU_MAIN) {
+      PS[psKey].menuType = MENU_MAIN;
+      drawPie(side, MENU_MAIN);
+    } else {
+      closePie(side);
+    }
+    return;
+  }
+
+  if (sec.next) {
+    PS[psKey].menuType = sec.next;
+    drawPie(side, sec.next);
+  } else {
+    // Leaf action
+    let actionId;
+    if (sec.id !== undefined) {
+      actionId = sec.id;
+    } else {
+      const base = side === 'L' ? 100 : 200;
+      actionId = base + sec.offset;
+    }
+    closePie(side);
+    showConfirm(side, actionId);
+  }
+}
+
+// Wire pie canvases
+['l','r'].forEach(s => {
+  const canvas = document.getElementById(`pie-canvas-${s}`);
+  canvas.addEventListener('touchend', e => handlePieTap(e, s === 'l' ? 'L' : 'R'), {passive:false});
+  document.getElementById(`pie-close-${s}`).addEventListener('touchend', e => {
+    e.preventDefault(); closePie(s === 'l' ? 'L' : 'R');
+  }, {passive:false});
+});
+
+// ── Confirm flow ──────────────────────────────────────────────────────────────
+let _pendingAction = null;
+
+function showConfirm(side, actionId) {
+  _pendingAction = {side, actionId};
+  const action = ACTIONS[actionId];
+  const wrapId = side === 'L' ? 'conf-l' : 'conf-r';
+  const iconId = side === 'L' ? 'conf-l-icon' : 'conf-r-icon';
+  document.getElementById(iconId).textContent = action ? action.emoji : '?';
+  document.getElementById(wrapId).classList.add('on');
+  const hint = document.getElementById('hint-pill');
+  hint.textContent = action ? action.label : '';
+  hint.classList.add('on');
+}
+
+function hideConfirm() {
+  document.getElementById('conf-l').classList.remove('on');
+  document.getElementById('conf-r').classList.remove('on');
+  document.getElementById('hint-pill').classList.remove('on');
+  _pendingAction = null;
+}
+
+['l','r'].forEach(s => {
+  document.getElementById(`conf-${s}-yes`).addEventListener('touchend', e => {
+    e.preventDefault();
+    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId);
+    hideConfirm();
+  }, {passive:false});
+  document.getElementById(`conf-${s}-no`).addEventListener('touchend', e => {
+    e.preventDefault(); hideConfirm(); if (!M.finished) startTimer();
+  }, {passive:false});
+});
+
+// ── Action buttons ────────────────────────────────────────────────────────────
+document.getElementById('btn-act-l').addEventListener('touchend', e => {
+  e.preventDefault(); openPie('L');
+}, {passive:false});
+document.getElementById('btn-act-r').addEventListener('touchend', e => {
+  e.preventDefault(); openPie('R');
+}, {passive:false});
+
+// Quick foul / challenge buttons
+document.getElementById('btn-foul-l').addEventListener('touchend', e => {
+  e.preventDefault(); stopTimer(); showConfirm('L', 190);
+}, {passive:false});
+document.getElementById('btn-foul-r').addEventListener('touchend', e => {
+  e.preventDefault(); stopTimer(); showConfirm('R', 290);
+}, {passive:false});
+document.getElementById('btn-chal-l').addEventListener('touchend', e => {
+  e.preventDefault(); stopTimer(); showConfirm('L', 3);
+}, {passive:false});
+document.getElementById('btn-chal-r').addEventListener('touchend', e => {
+  e.preventDefault(); stopTimer(); showConfirm('R', 3);
+}, {passive:false});
+
+// ── doConfirm — record action, update state ───────────────────────────────────
+function doConfirm(side, actionId) {
+  if (!M || M.finished) return;
+  const action = ACTIONS[actionId];
+  const ts     = M.periodDuration - M.timerSec;
+  const ev     = { ts, side: action ? action.side : 'C', actionId,
+                   label: action ? action.label : '?',
+                   emoji: action ? action.emoji  : '?',
+                   isHit: action ? action.isHit  : false,
+                   period: M.period };
+  M.events.push(ev);
+
+  if (action) {
+    if (action.isHit) {
+      if (side === 'L') { M.scoreL++; M.hpR = Math.max(0, M.hpR - 10); }
+      else              { M.scoreR++; M.hpL = Math.max(0, M.hpL - 10); }
+    }
+    if (actionId === 190 || actionId === 191) {
+      M.cardsL.push(action.emoji);
+      if (actionId === 191) { M.scoreR++; M.hpL = Math.max(0, M.hpL - 5); }
+    }
+    if (actionId === 290 || actionId === 291) {
+      M.cardsR.push(action.emoji);
+      if (actionId === 291) { M.scoreL++; M.hpR = Math.max(0, M.hpR - 5); }
+    }
+  }
+
+  refreshHUD();
+
+  // Win condition: DE ends at 15 touches; poule at 5
+  const maxScore = M.format === 'poule' ? 5 : 15;
+  if (M.scoreL >= maxScore || M.scoreR >= maxScore) { finishMatch(); return; }
+  if (!M.finished) startTimer();
+}
+
+// ── Events list render ────────────────────────────────────────────────────────
+function renderEventsList() {
+  document.getElementById('ev-name-l').textContent  = M.nameL;
+  document.getElementById('ev-name-r').textContent  = M.nameR;
+  document.getElementById('ev-score-l').textContent = M.scoreL;
+  document.getElementById('ev-score-r').textContent = M.scoreR;
+  const list = document.getElementById('ev-list');
+  list.innerHTML = '';
+  M.events.forEach(ev => {
+    const item  = document.createElement('div');
+    item.className = 'ev-item';
+    const side  = ev.side === 'L' ? 'l' : ev.side === 'R' ? 'r' : 'c';
+    const bubble = document.createElement('div');
+    bubble.className = `ev-bubble ev-${side}`;
+    bubble.innerHTML =
+      `<span class="ev-ts">${fmtTime(ev.ts)}</span>` +
+      `<span style="font-size:16px">${ev.emoji}</span>` +
+      `<span class="ev-hint">${ev.label}</span>`;
+    item.appendChild(bubble);
+    list.appendChild(item);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+
+// ── Camera / Recording ────────────────────────────────────────────────────────
+let _camStream    = null;
+let _mediaRec     = null;
+let _recChunks    = [];
+let _camState     = 'idle'; // idle | preview | recording
+
+async function toggleCamera() {
+  const btn     = document.getElementById('cam-btn');
+  const preview = document.getElementById('cam-preview');
+  const recDot  = document.getElementById('rec-dot');
+
+  if (_camState === 'idle') {
+    try {
+      _camStream = await navigator.mediaDevices.getUserMedia(
+        { video:{ facingMode:'environment' }, audio:true });
+      preview.srcObject = _camStream;
+      preview.classList.add('on');
+      btn.textContent = '⏺';
+      btn.classList.remove('recording');
+      _camState = 'preview';
+    } catch(_) { btn.textContent = '📷'; }
+    return;
+  }
+  if (_camState === 'preview') {
+    _recChunks = [];
+    _mediaRec  = new MediaRecorder(_camStream);
+    _mediaRec.ondataavailable = e => { if (e.data.size) _recChunks.push(e.data); };
+    _mediaRec.start(1000);
+    recDot.classList.add('on');
+    btn.classList.add('recording');
+    btn.textContent = '⏹';
+    _camState = 'recording';
+    return;
+  }
+  if (_camState === 'recording') {
+    _mediaRec.onstop = () => {
+      const blob = new Blob(_recChunks, { type:'video/webm' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `match-${Date.now()}.webm`; a.click();
+    };
+    _mediaRec.stop();
+    _camStream.getTracks().forEach(t => t.stop());
+    preview.classList.remove('on');
+    recDot.classList.remove('on');
+    btn.classList.remove('recording');
+    btn.textContent = '📷';
+    _camState = 'idle';
+  }
+}
+
+document.getElementById('cam-btn').addEventListener('touchend', e => {
+  e.preventDefault(); toggleCamera();
+}, {passive:false});
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(M, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.json`;
+  a.click();
+}
+
+function exportCSV() {
+  const rows = ['ts,side,actionId,label,isHit,period'];
+  M.events.forEach(ev => {
+    rows.push([ev.ts,ev.side,ev.actionId,`"${ev.label}"`,ev.isHit,ev.period].join(','));
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.csv`;
+  a.click();
+}
+
+function exportTXT() {
+  let txt = `UFL FENCING — ${M.nameL} vs ${M.nameR}\n`;
+  txt += `Weapon: ${M.weapon.toUpperCase()}  Format: ${M.format}\n`;
+  txt += `Final: ${M.scoreL} – ${M.scoreR}\n\n`;
+  M.events.forEach(ev => {
+    txt += `[${fmtTime(ev.ts)}] P${ev.period}  ${ev.emoji} ${ev.side === 'L' ? M.nameL : ev.side === 'R' ? M.nameR : 'REF'}: ${ev.label}\n`;
+  });
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.txt`;
+  a.click();
+}
+
+document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
+document.getElementById('exp-csv').addEventListener('touchend',  e=>{ e.preventDefault(); exportCSV();  },{passive:false});
+document.getElementById('exp-txt').addEventListener('touchend',  e=>{ e.preventDefault(); exportTXT();  },{passive:false});
+
+// ── Drawer ────────────────────────────────────────────────────────────────────
+function openDrawer() {
+  buildReport();
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('drawer-backdrop').classList.add('on');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('on');
+  document.getElementById('drawer-backdrop').classList.remove('on');
+}
+
+document.getElementById('fab-btn').addEventListener('touchend', e=>{ e.preventDefault(); openDrawer(); },{passive:false});
+document.getElementById('drawer-backdrop').addEventListener('touchend', e=>{ e.preventDefault(); closeDrawer(); },{passive:false});
+
+document.querySelectorAll('.dtab').forEach(tab => {
+  tab.addEventListener('touchend', e => {
+    e.preventDefault();
+    document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.dpanel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.panel).classList.add('active');
+  }, {passive:false});
+});
+
+function buildReport() {
+  if (!M) return;
+  const hitsL = M.events.filter(e=>e.side==='L'&&e.isHit).length;
+  const hitsR = M.events.filter(e=>e.side==='R'&&e.isHit).length;
+  document.getElementById('rpt-summary').innerHTML =
+    `<div class="rpt-row"><span class="rpt-k">${M.nameL}</span><span class="rpt-v">${M.scoreL} pts, ${hitsL} hits</span></div>` +
+    `<div class="rpt-row"><span class="rpt-k">${M.nameR}</span><span class="rpt-v">${M.scoreR} pts, ${hitsR} hits</span></div>` +
+    `<div class="rpt-row"><span class="rpt-k">Total events</span><span class="rpt-v">${M.events.length}</span></div>` +
+    `<div class="rpt-row"><span class="rpt-k">Duration</span><span class="rpt-v">${fmtTime(M.periodDuration - M.timerSec)}</span></div>`;
+
+  // AI panel: confidence stubs
+  const aiList = document.getElementById('ai-list');
+  aiList.innerHTML = '';
+  const recent = M.events.slice(-10).reverse();
+  recent.forEach(ev => {
+    const conf = ev.isHit ? 'h' : ev.side === 'C' ? 'm' : 'l';
+    const name = ev.side==='L' ? M.nameL : ev.side==='R' ? M.nameR : 'REF';
+    aiList.innerHTML +=
+      `<div class="ai-row"><span class="ai-ts">${fmtTime(ev.ts)}</span>` +
+      `<span class="ai-label">${ev.emoji} <b>${name}</b>: ${ev.label}</span>` +
+      `<span class="conf conf-${conf}">${conf==='h'?'HIGH':conf==='m'?'MED':'LOW'}</span></div>`;
+  });
+
+  // Stats panel
+  const statsEl = document.getElementById('stats-list');
+  const maxHits = Math.max(hitsL, hitsR, 1);
+  statsEl.innerHTML =
+    `<div class="stat-bar-r"><span class="stat-bar-l">${M.nameL} hits</span>` +
+    `<div class="stat-bar-b" style="width:${hitsL/maxHits*120}px"></div>` +
+    `<span class="stat-bar-n">${hitsL}</span></div>` +
+    `<div class="stat-bar-r"><span class="stat-bar-l">${M.nameR} hits</span>` +
+    `<div class="stat-bar-b" style="width:${hitsR/maxHits*120}px;background:var(--R)"></div>` +
+    `<span class="stat-bar-n">${hitsR}</span></div>` +
+    `<div class="stat-bar-r"><span class="stat-bar-l">Cards (L/R)</span>` +
+    `<span class="stat-bar-n">${M.cardsL.length} / ${M.cardsR.length}</span></div>`;
+}
+
+// ── Load JSON ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-load').addEventListener('touchend', e=>{
+  e.preventDefault(); document.getElementById('file-input').click();
+},{passive:false});
+
+document.getElementById('file-input').addEventListener('change', evt => {
+  const file = evt.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      M = JSON.parse(ev.target.result);
+      refreshHUD();
+      document.getElementById('fab-btn').style.display = 'flex';
+      openDrawer();
+    } catch(_) { alert('Invalid JSON file'); }
+  };
+  reader.readAsText(file);
+});
+
+// ── Portrait lock ─────────────────────────────────────────────────────────────
+function checkOrientation() {
+  const ov = document.getElementById('portrait-overlay');
+  ov.classList.toggle('on', window.innerWidth < window.innerHeight);
+}
+window.addEventListener('resize', checkOrientation);
+checkOrientation();
+
+// ── Settings state ────────────────────────────────────────────────────────────
+const CFG = { weapon:'foil', periods:1, duration:3, format:'DE' };
+
+// ── Chip selector setup ───────────────────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(btn => {
+  btn.addEventListener('touchend', e => {
+    e.preventDefault();
+    const group = btn.dataset.group;
+    document.querySelectorAll(`.chip[data-group="${group}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const val = btn.dataset.val;
+    if (group === 'wpn')  CFG.weapon  = val;
+    if (group === 'per')  CFG.periods  = +val;
+    if (group === 'dur')  CFG.duration = +val;
+    if (group === 'fmt')  CFG.format   = val;
+  }, {passive:false});
+});
+</script>
+</body>
+</html>
