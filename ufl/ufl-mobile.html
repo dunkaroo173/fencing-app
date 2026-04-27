@@ -437,70 +437,106 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 <script>
 'use strict';
 // ── Action catalogue ─────────────────────────────────────────────────────────
+// Left (100s): offense 100-104, defense ROW 110-114, no-ROW 120-124,
+//              off-target 140, cards 190-191
+// Right (200s): same offsets +100. Referee: single digits.
 const ACTIONS = {
-  // Left fencer (100s)
-  100:{id:100,label:'Touch',emoji:'🎯',side:'L',isHit:true},
-  101:{id:101,label:'Flèche',emoji:'⚡',side:'L',isHit:true},
-  102:{id:102,label:'Parry-Riposte',emoji:'🛡️',side:'L',isHit:true},
-  103:{id:103,label:'Counter-Attack',emoji:'🔄',side:'L',isHit:true},
-  104:{id:104,label:'Compound',emoji:'🔀',side:'L',isHit:true},
-  105:{id:105,label:'Remise',emoji:'↩️',side:'L',isHit:true},
-  140:{id:140,label:'Off-Target',emoji:'🟡',side:'L',isHit:false},
-  141:{id:141,label:'Out of Bounds',emoji:'⬛',side:'L',isHit:false},
-  190:{id:190,label:'Yellow Card',emoji:'🟨',side:'L',isHit:false},
-  191:{id:191,label:'Red Card',emoji:'🟥',side:'L',isHit:false},
-  // Right fencer (200s)
-  200:{id:200,label:'Touch',emoji:'🎯',side:'R',isHit:true},
-  201:{id:201,label:'Flèche',emoji:'⚡',side:'R',isHit:true},
-  202:{id:202,label:'Parry-Riposte',emoji:'🛡️',side:'R',isHit:true},
-  203:{id:203,label:'Counter-Attack',emoji:'🔄',side:'R',isHit:true},
-  204:{id:204,label:'Compound',emoji:'🔀',side:'R',isHit:true},
-  205:{id:205,label:'Remise',emoji:'↩️',side:'R',isHit:true},
-  240:{id:240,label:'Off-Target',emoji:'🟡',side:'R',isHit:false},
-  241:{id:241,label:'Out of Bounds',emoji:'⬛',side:'R',isHit:false},
-  290:{id:290,label:'Yellow Card',emoji:'🟨',side:'R',isHit:false},
-  291:{id:291,label:'Red Card',emoji:'🟥',side:'R',isHit:false},
-  // Referee (single digits)
-  1:{id:1,label:'Halt',emoji:'✋',side:'C',isHit:false},
-  2:{id:2,label:'Corps-à-corps',emoji:'🤼',side:'C',isHit:false},
-  3:{id:3,label:'Video Review',emoji:'📹',side:'C',isHit:false},
+  // Left — OFFENSE (right of way, attacker)
+  100:{id:100,label:'Simple Attack',    emoji:'⚔️', side:'L',isHit:true},
+  101:{id:101,label:'Compound Attack',  emoji:'🔀', side:'L',isHit:true},
+  102:{id:102,label:'Flèche',           emoji:'⚡', side:'L',isHit:true},
+  103:{id:103,label:'Beat Attack',      emoji:'🥊', side:'L',isHit:true},
+  104:{id:104,label:'Prise de Fer',     emoji:'🔗', side:'L',isHit:true},
+  // Left — DEFENSE ROW (defender establishes right of way)
+  110:{id:110,label:'Parry-Riposte',    emoji:'🛡️', side:'L',isHit:true},
+  111:{id:111,label:'Compound Riposte', emoji:'🔄', side:'L',isHit:true},
+  112:{id:112,label:'Point in Line',    emoji:'📍', side:'L',isHit:true},
+  113:{id:113,label:'Attack on Prep',   emoji:'🎯', side:'L',isHit:true},
+  114:{id:114,label:'No-Attack Touche', emoji:'✅', side:'L',isHit:true},
+  // Left — NONE (no right of way)
+  120:{id:120,label:'Counterattack',    emoji:'💢', side:'L',isHit:true},
+  121:{id:121,label:'Remise',           emoji:'↩️', side:'L',isHit:true},
+  122:{id:122,label:'Redoublement',     emoji:'🔁', side:'L',isHit:true},
+  123:{id:123,label:'Reprise',          emoji:'🔃', side:'L',isHit:true},
+  124:{id:124,label:'Simultaneous',     emoji:'⚖️', side:'L',isHit:false},
+  // Left — off-target / cards
+  140:{id:140,label:'Off-Target',       emoji:'🟡', side:'L',isHit:false},
+  141:{id:141,label:'Out of Bounds',    emoji:'⬛', side:'L',isHit:false},
+  190:{id:190,label:'Yellow Card',      emoji:'🟨', side:'L',isHit:false},
+  191:{id:191,label:'Red Card (+1)',     emoji:'🟥', side:'L',isHit:false},
+  // Right — OFFENSE
+  200:{id:200,label:'Simple Attack',    emoji:'⚔️', side:'R',isHit:true},
+  201:{id:201,label:'Compound Attack',  emoji:'🔀', side:'R',isHit:true},
+  202:{id:202,label:'Flèche',           emoji:'⚡', side:'R',isHit:true},
+  203:{id:203,label:'Beat Attack',      emoji:'🥊', side:'R',isHit:true},
+  204:{id:204,label:'Prise de Fer',     emoji:'🔗', side:'R',isHit:true},
+  // Right — DEFENSE ROW
+  210:{id:210,label:'Parry-Riposte',    emoji:'🛡️', side:'R',isHit:true},
+  211:{id:211,label:'Compound Riposte', emoji:'🔄', side:'R',isHit:true},
+  212:{id:212,label:'Point in Line',    emoji:'📍', side:'R',isHit:true},
+  213:{id:213,label:'Attack on Prep',   emoji:'🎯', side:'R',isHit:true},
+  214:{id:214,label:'No-Attack Touche', emoji:'✅', side:'R',isHit:true},
+  // Right — NONE
+  220:{id:220,label:'Counterattack',    emoji:'💢', side:'R',isHit:true},
+  221:{id:221,label:'Remise',           emoji:'↩️', side:'R',isHit:true},
+  222:{id:222,label:'Redoublement',     emoji:'🔁', side:'R',isHit:true},
+  223:{id:223,label:'Reprise',          emoji:'🔃', side:'R',isHit:true},
+  224:{id:224,label:'Simultaneous',     emoji:'⚖️', side:'R',isHit:false},
+  // Right — off-target / cards
+  240:{id:240,label:'Off-Target',       emoji:'🟡', side:'R',isHit:false},
+  241:{id:241,label:'Out of Bounds',    emoji:'⬛', side:'R',isHit:false},
+  290:{id:290,label:'Yellow Card',      emoji:'🟨', side:'R',isHit:false},
+  291:{id:291,label:'Red Card (+1)',     emoji:'🟥', side:'R',isHit:false},
+  // Referee
+  1:{id:1,label:'Halt',          emoji:'✋', side:'C',isHit:false},
+  2:{id:2,label:'Corps-à-corps', emoji:'🤼', side:'C',isHit:false},
+  3:{id:3,label:'Video Review',  emoji:'📹', side:'C',isHit:false},
 };
 
 // Pie menu definitions
-const MENU_MAIN   = 'MAIN';
-const MENU_SWORDS = 'SWORDS';
-const MENU_SHIELD = 'SHIELD';
-const MENU_CARD   = 'CARD';
-const MENU_OTHER  = 'OTHER';
+const MENU_MAIN    = 'MAIN';
+const MENU_OFFENSE = 'OFFENSE';
+const MENU_DEF_ROW = 'DEF_ROW';
+const MENU_NONE    = 'NONE';
+const MENU_CARD    = 'CARD';
 
-// Sectors per menu type (label, emoji, next menu or actionId offset)
+// color applies to MENU_MAIN sectors only; sub-menus use fencer side color
 const PIE_SECTORS = {
   [MENU_MAIN]: [
-    {label:'ATTACK',  emoji:'⚔️', next:MENU_SWORDS},
-    {label:'DEFENCE', emoji:'🛡️', next:MENU_SHIELD},
-    {label:'OTHER',   emoji:'🔄', next:MENU_OTHER},
-    {label:'CARD',    emoji:'🟨', next:MENU_CARD},
+    {label:'OFFENSE', emoji:'⚔️', next:MENU_OFFENSE, color:'#16a34a', colorFill:'rgba(22,163,74,0.28)'},
+    {label:'DEFENSE', emoji:'🛡️', next:MENU_DEF_ROW, color:'#dc2626', colorFill:'rgba(220,38,38,0.28)'},
+    {label:'NONE',    emoji:'⚖️', next:MENU_NONE,    color:'#2563eb', colorFill:'rgba(37,99,235,0.28)'},
+    {label:'CARD',    emoji:'🟨', next:MENU_CARD,    color:'#d97706', colorFill:'rgba(217,119,6,0.28)'},
   ],
-  [MENU_SWORDS]: [
-    {label:'Touch',         emoji:'🎯', offset:0},
-    {label:'Flèche',        emoji:'⚡', offset:1},
-    {label:'Parry-Rip.',    emoji:'🛡️', offset:2},
-    {label:'Counter',       emoji:'🔄', offset:3},
-    {label:'Compound',      emoji:'🔀', offset:4},
-    {label:'Remise',        emoji:'↩️', offset:5},
+  // offsets map as: base(100 or 200) + offset = actionId
+  [MENU_OFFENSE]: [
+    {label:'Simple Att.',  emoji:'⚔️', offset:0},
+    {label:'Compound',     emoji:'🔀', offset:1},
+    {label:'Flèche',       emoji:'⚡', offset:2},
+    {label:'Beat Att.',    emoji:'🥊', offset:3},
+    {label:'Prise de Fer', emoji:'🔗', offset:4},
   ],
-  [MENU_SHIELD]: [
-    {label:'Off-Target', emoji:'🟡', offset:40},
-    {label:'Out Bounds', emoji:'⬛', offset:41},
+  [MENU_DEF_ROW]: [
+    {label:'Parry-Rip.',   emoji:'🛡️', offset:10},
+    {label:'Cmpd Rip.',    emoji:'🔄', offset:11},
+    {label:'Pt in Line',   emoji:'📍', offset:12},
+    {label:'Att on Prep',  emoji:'🎯', offset:13},
+    {label:'No-Att Tch',   emoji:'✅', offset:14},
+  ],
+  [MENU_NONE]: [
+    {label:'Counterattk',  emoji:'💢', offset:20},
+    {label:'Remise',       emoji:'↩️', offset:21},
+    {label:'Redouble',     emoji:'🔁', offset:22},
+    {label:'Reprise',      emoji:'🔃', offset:23},
+    {label:'Simultan.',    emoji:'⚖️', offset:24},
   ],
   [MENU_CARD]: [
-    {label:'Yellow',  emoji:'🟨', offset:90},
-    {label:'Red',     emoji:'🟥', offset:91},
-  ],
-  [MENU_OTHER]: [
-    {label:'Halt',       emoji:'✋', id:1},
-    {label:'Corps-corps',emoji:'🤼', id:2},
-    {label:'Video Rev.', emoji:'📹', id:3},
+    {label:'Yellow',       emoji:'🟨', offset:90},
+    {label:'Red (+1)',     emoji:'🟥', offset:91},
+    {label:'Off-Target',   emoji:'🟡', offset:40},
+    {label:'Out Bounds',   emoji:'⬛', offset:41},
+    {label:'Halt',         emoji:'✋', id:1},
+    {label:'Video Rev.',   emoji:'📹', id:3},
   ],
 };
 
@@ -705,35 +741,49 @@ function drawPie(side, menuType) {
   const arc      = (2 * Math.PI) / n;
   ctx.clearRect(0, 0, 220, 220);
 
-  const sideColor = side === 'L' ? '#00c7ff' : '#e62600';
-  const sideColor2= side === 'L' ? 'rgba(0,199,255,0.25)' : 'rgba(230,38,0,0.25)';
+  // Fallback colors when sector has no per-sector color defined
+  const sideStroke = side === 'L' ? '#00c7ff' : '#e62600';
+  const sideFill   = side === 'L' ? 'rgba(0,199,255,0.22)' : 'rgba(230,38,0,0.22)';
+
+  // Sub-menu header color reflects the category
+  const categoryColor = {
+    [MENU_OFFENSE]: '#16a34a',
+    [MENU_DEF_ROW]: '#dc2626',
+    [MENU_NONE]:    '#2563eb',
+    [MENU_CARD]:    '#d97706',
+  };
 
   sectors.forEach((sec, i) => {
-    const startA = -Math.PI / 2 + arc * i - arc * 0.02;
-    const endA   = startA + arc * 0.96 + arc * 0.02;
+    const startA = -Math.PI / 2 + arc * i + arc * 0.02;
+    const endA   = startA + arc - arc * 0.04;
+    const stroke = sec.color    || categoryColor[menuType] || sideStroke;
+    const fill   = sec.colorFill|| (categoryColor[menuType]
+      ? categoryColor[menuType].replace(')', ',0.22)').replace('rgb','rgba')
+      : sideFill);
+
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, outerR, startA + arc * 0.02, endA - arc * 0.02);
+    ctx.arc(cx, cy, outerR, startA, endA);
     ctx.closePath();
-    ctx.fillStyle   = sideColor2;
-    ctx.strokeStyle = sideColor;
-    ctx.lineWidth   = 1.5;
+    ctx.fillStyle   = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth   = 2;
     ctx.fill();
     ctx.stroke();
 
-    // emoji + label
-    const midA  = startA + arc / 2 + arc * 0.02;
+    // Emoji + label
+    const midA   = startA + (endA - startA) / 2;
     const labelR = (outerR + innerR) / 2;
-    const ex = cx + Math.cos(midA) * (labelR - 6);
-    const ey = cy + Math.sin(midA) * (labelR - 6);
+    const ex = cx + Math.cos(midA) * (labelR - 4);
+    const ey = cy + Math.sin(midA) * (labelR - 4);
     ctx.font = '20px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff';
-    ctx.fillText(sec.emoji, ex, ey - 8);
-    ctx.font = 'bold 9px monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText(sec.label.toUpperCase().substring(0,8), ex, ey + 10);
+    ctx.fillText(sec.emoji, ex, ey - 9);
+    ctx.font = `bold 9px monospace`;
+    ctx.fillStyle = menuType === MENU_MAIN ? stroke : 'rgba(255,255,255,0.85)';
+    ctx.fillText(sec.label.toUpperCase().substring(0, 9), ex, ey + 9);
   });
 
   // Inner ring
@@ -741,11 +791,19 @@ function drawPie(side, menuType) {
   ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
   ctx.fillStyle = '#07080c';
   ctx.fill();
-  ctx.strokeStyle = sideColor;
+  const ringColor = categoryColor[menuType] || sideStroke;
+  ctx.strokeStyle = ringColor;
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  document.getElementById(centerId).textContent = menuType === MENU_MAIN ? 'SELECT\nACTION' : '← BACK';
+  const centerEl = document.getElementById(centerId);
+  if (menuType === MENU_MAIN) {
+    centerEl.textContent = 'TAP\nACTION';
+    centerEl.style.color = '#fff';
+  } else {
+    centerEl.textContent = '← BACK';
+    centerEl.style.color = categoryColor[menuType] || sideStroke;
+  }
 }
 
 function openPie(side) {
