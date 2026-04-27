@@ -1001,32 +1001,99 @@ function renderEventsList() {
 }
 
 // ── Camera / Recording ────────────────────────────────────────────────────────
-let _camStream    = null;
-let _mediaRec     = null;
-let _recChunks    = [];
-let _camState     = 'idle'; // idle | preview | recording
+let _camStream = null;
+let _mediaRec  = null;
+let _recChunks = [];
+let _camState  = 'idle'; // idle | preview | recording
+let _mimeType  = '';
+
+// Pick the best supported MIME type for this browser/OS
+function pickMime() {
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+  ];
+  if (typeof MediaRecorder === 'undefined') return '';
+  return candidates.find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+
+function camExt() {
+  return _mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+}
+
+function showCamError(msg) {
+  const pill = document.getElementById('hint-pill');
+  pill.textContent = '📷 ' + msg;
+  pill.classList.add('on');
+  setTimeout(() => pill.classList.remove('on'), 3500);
+}
+
+function resetCamUI() {
+  const btn    = document.getElementById('cam-btn');
+  const prev   = document.getElementById('cam-preview');
+  const recDot = document.getElementById('rec-dot');
+  btn.textContent = '📷';
+  btn.classList.remove('recording');
+  prev.classList.remove('on');
+  prev.srcObject = null;
+  recDot.classList.remove('on');
+  _camState  = 'idle';
+  _camStream = null;
+  _mediaRec  = null;
+  _recChunks = [];
+}
 
 async function toggleCamera() {
   const btn     = document.getElementById('cam-btn');
   const preview = document.getElementById('cam-preview');
   const recDot  = document.getElementById('rec-dot');
 
+  // ── IDLE → PREVIEW ──────────────────────────────────────────────────────────
   if (_camState === 'idle') {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCamError('Camera not supported in this browser'); return;
+    }
     try {
-      _camStream = await navigator.mediaDevices.getUserMedia(
-        { video:{ facingMode:'environment' }, audio:true });
+      _camStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: true,
+      });
+      _mimeType = pickMime();
       preview.srcObject = _camStream;
+      // play() is required on some Android WebViews even with autoplay attr
+      await preview.play().catch(() => {});
       preview.classList.add('on');
       btn.textContent = '⏺';
-      btn.classList.remove('recording');
       _camState = 'preview';
-    } catch(_) { btn.textContent = '📷'; }
+    } catch (err) {
+      const msg = err.name === 'NotAllowedError'  ? 'Permission denied' :
+                  err.name === 'NotFoundError'     ? 'No camera found'   :
+                  err.name === 'NotReadableError'  ? 'Camera in use'     :
+                  'Camera unavailable';
+      showCamError(msg);
+      resetCamUI();
+    }
     return;
   }
+
+  // ── PREVIEW → RECORDING ─────────────────────────────────────────────────────
   if (_camState === 'preview') {
+    if (typeof MediaRecorder === 'undefined') {
+      showCamError('Recording not supported — preview only'); return;
+    }
     _recChunks = [];
-    _mediaRec  = new MediaRecorder(_camStream);
-    _mediaRec.ondataavailable = e => { if (e.data.size) _recChunks.push(e.data); };
+    try {
+      _mediaRec = _mimeType
+        ? new MediaRecorder(_camStream, { mimeType: _mimeType })
+        : new MediaRecorder(_camStream);
+    } catch (_) {
+      _mediaRec = new MediaRecorder(_camStream);
+    }
+    _mediaRec.ondataavailable = e => { if (e.data && e.data.size) _recChunks.push(e.data); };
+    _mediaRec.onerror = () => { showCamError('Recording error — stopping'); resetCamUI(); };
     _mediaRec.start(1000);
     recDot.classList.add('on');
     btn.classList.add('recording');
@@ -1034,20 +1101,25 @@ async function toggleCamera() {
     _camState = 'recording';
     return;
   }
+
+  // ── RECORDING → STOP + SAVE ─────────────────────────────────────────────────
   if (_camState === 'recording') {
     _mediaRec.onstop = () => {
-      const blob = new Blob(_recChunks, { type:'video/webm' });
+      if (_recChunks.length === 0) { showCamError('No data recorded'); return; }
+      const mime = _mimeType || 'video/webm';
+      const blob = new Blob(_recChunks, { type: mime });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url; a.download = `match-${Date.now()}.webm`; a.click();
+      a.href     = url;
+      a.download = `match-${Date.now()}.${camExt()}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     };
     _mediaRec.stop();
     _camStream.getTracks().forEach(t => t.stop());
-    preview.classList.remove('on');
-    recDot.classList.remove('on');
-    btn.classList.remove('recording');
-    btn.textContent = '📷';
-    _camState = 'idle';
+    resetCamUI();
   }
 }
 
