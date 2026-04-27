@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   createProfile, applyBoutResult, getTier, displayRating,
   computeELODelta, computeFENCReward, computeSeasonPoints,
-  TIERS, type FencerProfile, type Weapon,
+  computeUSDCPayout, TIERS, type FencerProfile, type Weapon,
 } from './elo';
 
 const WEAPON: Weapon = 'foil';
-const STORAGE_KEY = 'fencing_profiles_v1';
+const STORAGE_KEY   = 'fencing_profiles_v1';
+const BETS_KEY      = 'fencing_bets_v1';
 
 function loadProfiles(): Record<string, FencerProfile> {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
@@ -14,6 +15,19 @@ function loadProfiles(): Record<string, FencerProfile> {
 function saveProfiles(p: Record<string, FencerProfile>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
 }
+
+interface PendingBet {
+  matchKey: string;   // `${nameA}__${nameB}`
+  nameA: string; nameB: string;
+  stakeA: number; stakeB: number;  // USDC each side bet
+  settled: boolean;
+  winner?: string;
+  payoutA?: number; payoutB?: number;
+}
+function loadBets(): PendingBet[] {
+  try { return JSON.parse(localStorage.getItem(BETS_KEY) || '[]'); } catch { return []; }
+}
+function saveBets(b: PendingBet[]) { localStorage.setItem(BETS_KEY, JSON.stringify(b)); }
 
 declare global {
   interface Window {
@@ -90,6 +104,8 @@ export default function TournamentAppPreview() {
   const [seeding, setSeeding] = useState<any[]>([]);
   const [tableau, setTableau] = useState<any[]>([]);
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
+  const [bets, setBets] = useState<PendingBet[]>(loadBets);
+  const [stakeInputs, setStakeInputs] = useState<Record<string, string>>({});
 
   // Voice state
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -97,8 +113,8 @@ export default function TournamentAppPreview() {
   const [voiceStatus, setVoiceStatus] = useState('');
   const [voiceSupported, setVoiceSupported] = useState(false);
 
-  // Persist profiles on every change
   useEffect(() => { saveProfiles(profiles); }, [profiles]);
+  useEffect(() => { saveBets(bets); }, [bets]);
 
   const recognitionRef = useRef<any>(null);
 
@@ -572,10 +588,11 @@ export default function TournamentAppPreview() {
                       <div key={i} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                         <span className="w-6 text-center text-xs text-gray-400 font-mono">{i + 1}</span>
                         <span className="font-semibold text-sm text-gray-800">{a?.name || 'BYE'}</span>
-                        <span className="text-xs text-gray-300 font-bold">vs</span>
+                        <span className="text-xs text-gray-300 font-bold mx-2">vs</span>
                         <span className="text-sm text-gray-400 italic">BYE</span>
                       </div>
                     );
+                    const mk = `${a.name}__${b.name}`;
                     const pa = profiles[a.name], pb = profiles[b.name];
                     const ra = pa?.ratings[WEAPON].rating ?? 1200;
                     const rb = pb?.ratings[WEAPON].rating ?? 1200;
@@ -590,24 +607,95 @@ export default function TournamentAppPreview() {
                     const fencB = computeFENCReward(rb, ra, true);
                     const tierA = pa ? getTier(ra, pa.currentTier) : TIERS[1];
                     const tierB = pb ? getTier(rb, pb.currentTier) : TIERS[1];
+                    const existingBet = bets.find(bt => bt.matchKey === mk);
+                    const stakeVal = stakeInputs[mk] ?? '10';
+                    const stake = Math.max(1, Math.min(100, Number(stakeVal) || 10));
+
+                    const placeBet = () => {
+                      if (existingBet) return;
+                      if ((pa?.usdcBalance ?? 0) < stake || (pb?.usdcBalance ?? 0) < stake) return;
+                      const newBet: PendingBet = { matchKey: mk, nameA: a.name, nameB: b.name, stakeA: stake, stakeB: stake, settled: false };
+                      setBets(prev => [...prev, newBet]);
+                      setProfiles(prev => ({
+                        ...prev,
+                        [a.name]: { ...prev[a.name], usdcBalance: (prev[a.name]?.usdcBalance ?? 0) - stake },
+                        [b.name]: { ...prev[b.name], usdcBalance: (prev[b.name]?.usdcBalance ?? 0) - stake },
+                      }));
+                    };
+
+                    const settleResult = (winner: string) => {
+                      if (!existingBet || existingBet.settled) return;
+                      const loser = winner === a.name ? b.name : a.name;
+                      const winnerELO = winner === a.name ? ra : rb;
+                      const loserELO  = winner === a.name ? rb : ra;
+                      const { winnerPayout } = computeUSDCPayout(existingBet.stakeA, existingBet.stakeB, winnerELO, loserELO);
+                      const fencReward = computeFENCReward(winnerELO, loserELO, true);
+                      const fencConsol = computeFENCReward(loserELO, winnerELO, false);
+                      const spW = computeSeasonPoints(winnerELO, loserELO, true);
+                      const spL = computeSeasonPoints(loserELO, winnerELO, false);
+                      const { deltaWinner, deltaLoser } = computeELODelta(winnerELO, loserELO, 15, 10, 'DE', ba, bb);
+                      setBets(prev => prev.map(bt => bt.matchKey === mk
+                        ? { ...bt, settled: true, winner, payoutA: winner === a.name ? winnerPayout : 0, payoutB: winner === b.name ? winnerPayout : 0 }
+                        : bt));
+                      setProfiles(prev => ({
+                        ...prev,
+                        [winner]: applyBoutResult(prev[winner] ?? createProfile(winner), WEAPON, deltaWinner, fencReward, spW, winnerPayout),
+                        [loser]:  applyBoutResult(prev[loser]  ?? createProfile(loser),  WEAPON, deltaLoser,  fencConsol, spL, 0),
+                      }));
+                    };
+
                     return (
                       <div key={i} className={`px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                        {/* Header row */}
                         <div className="flex items-center gap-2 mb-2">
                           <span className="w-5 text-center text-xs text-gray-400 font-mono">{i + 1}</span>
-                          <span className="text-base">{tierA.emoji}</span>
+                          <span>{tierA.emoji}</span>
                           <span className="font-semibold text-sm text-gray-800 flex-1">{a.name}</span>
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{pWinA}%</span>
                           <span className="text-xs text-gray-300 font-bold">vs</span>
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">{100 - pWinA}%</span>
                           <span className="font-semibold text-sm text-gray-800 flex-1 text-right">{b.name}</span>
-                          <span className="text-base">{tierB.emoji}</span>
+                          <span>{tierB.emoji}</span>
                         </div>
-                        <div className="flex gap-3 text-xs text-gray-500 pl-7">
-                          <span>+{gainA} ELO if win</span>
-                          <span className="text-yellow-600">✦{fencA} FENC</span>
-                          <span className="ml-auto">✦{fencB} FENC</span>
-                          <span>+{gainB} ELO if win</span>
+                        {/* ELO + FENC preview */}
+                        <div className="flex gap-3 text-xs text-gray-400 pl-6 mb-3">
+                          <span>+{gainA} ELO</span>
+                          <span className="text-yellow-600">✦{fencA}</span>
+                          <span className="ml-auto text-yellow-600">✦{fencB}</span>
+                          <span>+{gainB} ELO</span>
                         </div>
+                        {/* Bet / result area */}
+                        {existingBet?.settled ? (
+                          <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-xs text-green-700">
+                            ✅ <strong>{existingBet.winner}</strong> won · Payout ${((existingBet.payoutA ?? 0) + (existingBet.payoutB ?? 0)).toFixed(2)} USDC
+                          </div>
+                        ) : existingBet ? (
+                          <div className="space-y-2">
+                            <p className="text-xs text-gray-500 pl-1">Bet locked — ${existingBet.stakeA} each. Select winner:</p>
+                            <div className="flex gap-2">
+                              <button onClick={() => settleResult(a.name)}
+                                className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold active:bg-blue-700">
+                                {a.name} wins
+                              </button>
+                              <button onClick={() => settleResult(b.name)}
+                                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-xs font-bold active:bg-red-600">
+                                {b.name} wins
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs text-gray-500">Stake $</span>
+                            <input type="number" min={1} max={100} value={stakeVal}
+                              onChange={e => setStakeInputs(prev => ({ ...prev, [mk]: e.target.value }))}
+                              className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center" />
+                            <span className="text-xs text-gray-400">each · payout ~${computeUSDCPayout(stake, stake, ra, rb).winnerPayout.toFixed(2)}</span>
+                            <button onClick={placeBet}
+                              className="ml-auto px-3 py-1.5 bg-yellow-500 text-white rounded-xl text-xs font-bold active:bg-yellow-600">
+                              Bet USDC
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -710,9 +798,30 @@ export default function TournamentAppPreview() {
                       <div className="flex justify-between"><span className="text-gray-500">Protected ELO</span><span className="font-semibold">{selected.protectedELO}</span></div>
                     </div>
                   </div>
+                  {bets.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bet History</p>
+                      </div>
+                      {bets.slice().reverse().map((bt, i) => (
+                        <div key={i} className={`px-4 py-2.5 text-xs ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${bt.settled ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                            <span className="font-medium text-gray-700">{bt.nameA} vs {bt.nameB}</span>
+                            <span className="ml-auto text-gray-500">${bt.stakeA + bt.stakeB} pool</span>
+                          </div>
+                          {bt.settled && (
+                            <p className="text-green-600 mt-0.5 pl-4">
+                              Winner: {bt.winner} · +${((bt.payoutA ?? 0) + (bt.payoutB ?? 0)).toFixed(2)} USDC
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-                    <p className="text-xs font-semibold text-blue-700 mb-1">Live betting — coming soon</p>
-                    <p className="text-xs text-blue-500">USDC escrow on Base mainnet via Privy embedded wallets. Payouts use ELO-adjusted parimutuel with 5% rake and 3× upset cap.</p>
+                    <p className="text-xs font-semibold text-blue-700 mb-1">On-chain betting — Base mainnet</p>
+                    <p className="text-xs text-blue-500">Privy embedded wallets · USDC escrow · ELO-adjusted parimutuel · 5% rake · 3× upset cap</p>
                   </div>
                 </>
               }
