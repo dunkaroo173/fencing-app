@@ -1,4 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  createProfile, applyBoutResult, getTier, displayRating,
+  computeELODelta, computeFENCReward, computeSeasonPoints,
+  TIERS, type FencerProfile, type Weapon,
+} from './elo';
+
+const WEAPON: Weapon = 'foil';
+const STORAGE_KEY = 'fencing_profiles_v1';
+
+function loadProfiles(): Record<string, FencerProfile> {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+function saveProfiles(p: Record<string, FencerProfile>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+}
 
 declare global {
   interface Window {
@@ -67,6 +82,7 @@ type Match = { pouleIdx: number; keyA: string; keyB: string };
 
 export default function TournamentAppPreview() {
   const [tab, setTab] = useState('register');
+  const [profiles, setProfiles] = useState<Record<string, FencerProfile>>(loadProfiles);
   const [fencers, setFencers] = useState<string[]>([]);
   const [inputName, setInputName] = useState('');
   const [poules, setPoules] = useState<any[]>([]);
@@ -81,16 +97,21 @@ export default function TournamentAppPreview() {
   const [voiceStatus, setVoiceStatus] = useState('');
   const [voiceSupported, setVoiceSupported] = useState(false);
 
+  // Persist profiles on every change
+  useEffect(() => { saveProfiles(profiles); }, [profiles]);
+
   const recognitionRef = useRef<any>(null);
 
   // Keep mutable refs to avoid stale closures inside recognition callbacks
   const stateRef = useRef({
-    tab, fencers, activeMatch, pouleScores, poules, voiceEnabled,
+    tab, fencers, activeMatch, pouleScores, poules, voiceEnabled, profiles,
     setFencers, setPouleScores, setPoules, setSeeding, setTableau, setTab, setVoiceStatus, setActiveMatch,
+    setProfiles,
   });
   stateRef.current = {
-    tab, fencers, activeMatch, pouleScores, poules, voiceEnabled,
+    tab, fencers, activeMatch, pouleScores, poules, voiceEnabled, profiles,
     setFencers, setPouleScores, setPoules, setSeeding, setTableau, setTab, setVoiceStatus, setActiveMatch,
+    setProfiles,
   };
 
   useEffect(() => {
@@ -136,6 +157,33 @@ export default function TournamentAppPreview() {
       matches.push([sorted[i], sorted[i + 1] || null]);
     }
     setTableau(matches);
+
+    // Apply ELO deltas for every poule result
+    const currentProfiles = stateRef.current.profiles ?? {};
+    let updated = { ...currentProfiles };
+    poules.forEach((poule: any) => {
+      poule.fencers.forEach((fa: any, i: number) => {
+        poule.fencers.slice(i + 1).forEach((fb: any) => {
+          const sa = pouleScores[`${fa.name}-${fb.name}-A`] ?? 0;
+          const sb = pouleScores[`${fa.name}-${fb.name}-B`] ?? 0;
+          if (sa === 0 && sb === 0) return;
+          const [winner, loser, sw, sl] = sa >= sb
+            ? [fa.name, fb.name, sa, sb] : [fb.name, fa.name, sb, sa];
+          const wp = updated[winner] ?? createProfile(winner);
+          const lp = updated[loser]  ?? createProfile(loser);
+          const wr = wp.ratings[WEAPON], lr = lp.ratings[WEAPON];
+          const { deltaWinner, deltaLoser } = computeELODelta(
+            wr.rating, lr.rating, sw, sl, 'poule', wr.boutsPlayed, lr.boutsPlayed);
+          const fencW = computeFENCReward(wr.rating, lr.rating, true);
+          const fencL = computeFENCReward(lr.rating, wr.rating, false);
+          const spW   = computeSeasonPoints(wr.rating, lr.rating, true);
+          const spL   = computeSeasonPoints(lr.rating, wr.rating, false);
+          updated[winner] = applyBoutResult(wp, WEAPON, deltaWinner, fencW, spW, 0);
+          updated[loser]  = applyBoutResult(lp, WEAPON, deltaLoser,  fencL, spL, 0);
+        });
+      });
+    });
+    stateRef.current.setProfiles?.(updated);
   }, []);
 
   // Voice command processor (always reads from stateRef — no stale closures)
@@ -266,15 +314,20 @@ export default function TournamentAppPreview() {
     const name = inputName.trim();
     if (name && !fencers.includes(name)) {
       setFencers([...fencers, name]);
+      if (!profiles[name]) {
+        setProfiles(prev => ({ ...prev, [name]: createProfile(name) }));
+      }
       setInputName('');
     }
   };
 
   const tabs = [
-    { id: 'register', label: 'Register', icon: '👤' },
-    { id: 'poules', label: 'Poules', icon: '⚔️' },
-    { id: 'seeding', label: 'Seeding', icon: '📊' },
-    { id: 'tableau', label: 'Tableau', icon: '🏆' },
+    { id: 'register',  label: 'Register',  icon: '👤' },
+    { id: 'poules',    label: 'Poules',    icon: '⚔️' },
+    { id: 'seeding',   label: 'Seeding',   icon: '📊' },
+    { id: 'tableau',   label: 'Tableau',   icon: '🏆' },
+    { id: 'rankings',  label: 'Rankings',  icon: '🎖️' },
+    { id: 'wallet',    label: 'Wallet',    icon: '💰' },
   ];
 
   return (
@@ -465,23 +518,31 @@ export default function TournamentAppPreview() {
                 <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
                   <h2 className="font-bold text-gray-700">Final Seeding</h2>
                 </div>
-                {seeding.map((f, i) => (
-                  <div key={i}
-                    className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
-                    <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0
-                      ${i === 0 ? 'bg-yellow-400 text-yellow-900'
-                        : i === 1 ? 'bg-gray-300 text-gray-700'
-                        : i === 2 ? 'bg-amber-600 text-white'
-                        : 'bg-gray-100 text-gray-500'}`}>
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 font-semibold text-gray-800">{f.name}</span>
-                    <span className="text-xs text-gray-500 tabular-nums">W: {f.wins}</span>
-                    <span className={`text-xs tabular-nums font-medium ${f.indicator >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {f.indicator > 0 ? '+' : ''}{f.indicator}
-                    </span>
-                  </div>
-                ))}
+                {seeding.map((f, i) => {
+                  const p = profiles[f.name];
+                  const fr = p?.ratings[WEAPON];
+                  const tier = p ? getTier(fr!.rating, p.currentTier) : TIERS[1];
+                  return (
+                    <div key={i}
+                      className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0
+                        ${i === 0 ? 'bg-yellow-400 text-yellow-900'
+                          : i === 1 ? 'bg-gray-300 text-gray-700'
+                          : i === 2 ? 'bg-amber-600 text-white'
+                          : 'bg-gray-100 text-gray-500'}`}>
+                        {i + 1}
+                      </span>
+                      <span className="text-lg leading-none" title={tier.name}>{tier.emoji}</span>
+                      <span className="flex-1 font-semibold text-gray-800">{f.name}</span>
+                      {fr && <span className="text-xs font-mono font-bold" style={{ color: tier.color }}>{displayRating(fr)}</span>}
+                      <span className="text-xs text-gray-500 tabular-nums">W:{f.wins}</span>
+                      <span className={`text-xs tabular-nums font-medium ${f.indicator >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {f.indicator > 0 ? '+' : ''}{f.indicator}
+                      </span>
+                      {p && <span className="text-xs text-yellow-600 font-mono">{Math.round(p.fencBalance)}✦</span>}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -506,26 +567,159 @@ export default function TournamentAppPreview() {
                   <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
                     <h2 className="font-bold text-gray-700">Direct Elimination</h2>
                   </div>
-                  {tableau.map(([a, b], i) => (
-                    <div key={i}
-                      className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
-                      <span className="w-6 text-center text-xs text-gray-400 font-mono font-bold">{i + 1}</span>
-                      <div className="flex-1 flex items-center justify-between gap-3">
-                        <span className={`font-semibold text-sm ${a ? 'text-gray-800' : 'text-gray-400 italic'}`}>
-                          {a?.name || 'BYE'}
-                        </span>
-                        <span className="text-xs font-extrabold text-gray-300">vs</span>
-                        <span className={`font-semibold text-sm text-right ${b ? 'text-gray-800' : 'text-gray-400 italic'}`}>
-                          {b?.name || 'BYE'}
-                        </span>
+                  {tableau.map(([a, b], i) => {
+                    if (!a || !b) return (
+                      <div key={i} className={`flex items-center gap-3 px-4 py-4 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                        <span className="w-6 text-center text-xs text-gray-400 font-mono">{i + 1}</span>
+                        <span className="font-semibold text-sm text-gray-800">{a?.name || 'BYE'}</span>
+                        <span className="text-xs text-gray-300 font-bold">vs</span>
+                        <span className="text-sm text-gray-400 italic">BYE</span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                    const pa = profiles[a.name], pb = profiles[b.name];
+                    const ra = pa?.ratings[WEAPON].rating ?? 1200;
+                    const rb = pb?.ratings[WEAPON].rating ?? 1200;
+                    const ba = pa?.ratings[WEAPON].boutsPlayed ?? 0;
+                    const bb = pb?.ratings[WEAPON].boutsPlayed ?? 0;
+                    const pWinA = +(1 / (1 + Math.pow(10, (rb - ra) / 400)) * 100).toFixed(0);
+                    const Ka = Math.max(16, 64 - ba * 2);
+                    const Kb = Math.max(16, 64 - bb * 2);
+                    const gainA = Math.round(Ka * (1 - pWinA / 100));
+                    const gainB = Math.round(Kb * (pWinA / 100));
+                    const fencA = computeFENCReward(ra, rb, true);
+                    const fencB = computeFENCReward(rb, ra, true);
+                    const tierA = pa ? getTier(ra, pa.currentTier) : TIERS[1];
+                    const tierB = pb ? getTier(rb, pb.currentTier) : TIERS[1];
+                    return (
+                      <div key={i} className={`px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="w-5 text-center text-xs text-gray-400 font-mono">{i + 1}</span>
+                          <span className="text-base">{tierA.emoji}</span>
+                          <span className="font-semibold text-sm text-gray-800 flex-1">{a.name}</span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{pWinA}%</span>
+                          <span className="text-xs text-gray-300 font-bold">vs</span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">{100 - pWinA}%</span>
+                          <span className="font-semibold text-sm text-gray-800 flex-1 text-right">{b.name}</span>
+                          <span className="text-base">{tierB.emoji}</span>
+                        </div>
+                        <div className="flex gap-3 text-xs text-gray-500 pl-7">
+                          <span>+{gainA} ELO if win</span>
+                          <span className="text-yellow-600">✦{fencA} FENC</span>
+                          <span className="ml-auto">✦{fencB} FENC</span>
+                          <span>+{gainB} ELO if win</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )
             }
           </div>
         )}
+        {/* ── RANKINGS ── */}
+        {tab === 'rankings' && (() => {
+          const ranked = Object.values(profiles)
+            .map(p => ({ p, rating: p.ratings[WEAPON].rating }))
+            .sort((a, b) => b.rating - a.rating);
+          return (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">ELO Leaderboard</h2>
+              {ranked.length === 0 && <p className="text-center text-gray-400 py-12">No rated fencers yet.</p>}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {ranked.map(({ p, rating }, i) => {
+                  const fr = p.ratings[WEAPON];
+                  const tier = getTier(rating, p.currentTier);
+                  return (
+                    <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                      <span className="w-6 text-xs text-gray-400 font-mono text-center font-bold">{i + 1}</span>
+                      <span className="text-xl">{tier.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-800 text-sm truncate">{p.name}</p>
+                        <p className="text-xs font-medium" style={{ color: tier.color }}>{tier.name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono font-bold text-sm text-gray-800">{displayRating(fr)}</p>
+                        <p className="text-xs text-yellow-600">✦ {Math.round(p.fencBalance)}</p>
+                      </div>
+                      <div className="text-right text-xs text-gray-400">
+                        <p>{fr.boutsPlayed}b</p>
+                        <p>{p.seasonPoints}sp</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tier Rewards</p>
+                {TIERS.slice().reverse().map(t => (
+                  <div key={t.name} className="flex items-center gap-2 py-1">
+                    <span>{t.emoji}</span>
+                    <span className="text-sm font-medium flex-1" style={{ color: t.color }}>{t.name}</span>
+                    <span className="text-xs text-gray-500">{t.rewardMultiplier}× FENC</span>
+                    <span className="text-xs text-gray-400">${t.minBetUSDC}–${t.maxBetUSDC}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── WALLET ── */}
+        {tab === 'wallet' && (() => {
+          const allProfiles = Object.values(profiles);
+          const selected = allProfiles[0]; // first profile as demo "current user"
+          return (
+            <div className="space-y-4">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Wallet — Demo Mode</h2>
+              {!selected
+                ? <p className="text-center text-gray-400 py-12">Register a fencer first.</p>
+                : <>
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{getTier(selected.ratings[WEAPON].rating, selected.currentTier).emoji}</span>
+                      <div>
+                        <p className="font-bold text-gray-800">{selected.name}</p>
+                        <p className="text-xs font-medium" style={{ color: getTier(selected.ratings[WEAPON].rating, selected.currentTier).color }}>
+                          {getTier(selected.ratings[WEAPON].rating, selected.currentTier).name} · {displayRating(selected.ratings[WEAPON])} ELO
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-yellow-50 rounded-xl p-3 text-center border border-yellow-100">
+                        <p className="text-xs text-yellow-600 font-semibold">FENC Balance</p>
+                        <p className="text-2xl font-bold text-yellow-700">✦{Math.round(selected.fencBalance)}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-xl p-3 text-center border border-green-100">
+                        <p className="text-xs text-green-600 font-semibold">USDC Balance</p>
+                        <p className="text-2xl font-bold text-green-700">${selected.usdcBalance.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                      <p className="text-xs text-gray-500 mb-1">Wallet Address</p>
+                      <p className="text-xs font-mono text-gray-400 break-all">
+                        {selected.walletAddress ?? 'Not connected — Base mainnet (demo mode)'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Season Stats</p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-500">Bouts played</span><span className="font-semibold">{selected.ratings[WEAPON].boutsPlayed}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Season points</span><span className="font-semibold">{selected.seasonPoints}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Peak ELO</span><span className="font-semibold">{selected.peakELO}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Protected ELO</span><span className="font-semibold">{selected.protectedELO}</span></div>
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                    <p className="text-xs font-semibold text-blue-700 mb-1">Live betting — coming soon</p>
+                    <p className="text-xs text-blue-500">USDC escrow on Base mainnet via Privy embedded wallets. Payouts use ELO-adjusted parimutuel with 5% rake and 3× upset cap.</p>
+                  </div>
+                </>
+              }
+            </div>
+          );
+        })()}
+
       </main>
 
       {/* Bottom navigation */}
