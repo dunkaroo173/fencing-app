@@ -434,6 +434,8 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     </div>
     <!-- Stats panel -->
     <div class="dpanel" id="panel-stats">
+      <canvas id="radar-canvas" width="280" height="280" style="display:block;margin:8px auto 0"></canvas>
+      <div id="radar-legend" style="display:flex;gap:20px;justify-content:center;padding:6px 0 10px;font-family:var(--mono);font-size:11px"></div>
       <div id="stats-list"></div>
     </div>
   </div>
@@ -1255,18 +1257,139 @@ function buildReport() {
       `<span class="conf conf-${conf}">${conf==='h'?'HIGH':conf==='m'?'MED':'LOW'}</span></div>`;
   });
 
-  // Stats panel
+  // ── Radar axes: every possible action, grouped by category ──────────────────
+  const RADAR_AXES = [
+    // OFFENSE
+    {label:'Simple Att.', L:100, R:200},
+    {label:'Compound',    L:101, R:201},
+    {label:'Flèche',      L:102, R:202},
+    {label:'Beat Att.',   L:103, R:203},
+    {label:'Prise de Fer',L:104, R:204},
+    // DEFENSE ROW
+    {label:'Parry-Rip.',  L:110, R:210},
+    {label:'Pt in Line',  L:112, R:212},
+    {label:'Att on Prep', L:113, R:213},
+    {label:'No-Att Tch',  L:114, R:214},
+    // NONE / NO ROW
+    {label:'Counterattk', L:120, R:220},
+    {label:'Remise',      L:121, R:221},
+    {label:'Continuation',L:122, R:222},
+    {label:'Simultan.',   L:123, R:223, extra:[124]}, // pause-screen simultaneous also
+  ];
+
+  // Count events per axis per fencer
+  const countL = {}, countR = {};
+  M.events.forEach(ev => {
+    countL[ev.actionId] = (countL[ev.actionId] || 0) + 1;
+    countR[ev.actionId] = (countR[ev.actionId] || 0) + 1;
+  });
+
+  const valL = RADAR_AXES.map(ax =>
+    (countL[ax.L] || 0) + (ax.extra ? ax.extra.reduce((s,id) => s + (countL[id]||0), 0) : 0)
+  );
+  const valR = RADAR_AXES.map(ax =>
+    (countR[ax.R] || 0) + (ax.extra ? ax.extra.reduce((s,id) => s + (countR[id]||0), 0) : 0)
+  );
+
+  // ── Draw radar ────────────────────────────────────────────────────────────────
+  const canvas = document.getElementById('radar-canvas');
+  const ctx    = canvas.getContext('2d');
+  const N   = RADAR_AXES.length;
+  const CX  = 140, CY = 140, R = 100;
+  ctx.clearRect(0, 0, 280, 280);
+
+  const angle = i => (2 * Math.PI * i / N) - Math.PI / 2;
+  const pt    = (i, r) => [CX + r * Math.cos(angle(i)), CY + r * Math.sin(angle(i))];
+  const maxVal = Math.max(...valL, ...valR, 1);
+
+  // Grid rings (3 levels)
+  for (let ring = 1; ring <= 3; ring++) {
+    const rr = R * ring / 3;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const [x, y] = pt(i, rr);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Axis spokes + labels
+  RADAR_AXES.forEach((ax, i) => {
+    const [x, y] = pt(i, R);
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Label — nudge outward past the ring
+    const [lx, ly] = pt(i, R + 16);
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(ax.label.toUpperCase(), lx, ly);
+  });
+
+  // Draw filled polygon for one dataset
+  function drawShape(vals, color, fillAlpha) {
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const r = (v / maxVal) * R;
+      const [x, y] = pt(i, r);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = color.replace(')', `,${fillAlpha})`).replace('rgb','rgba');
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Dots
+    vals.forEach((v, i) => {
+      const r = (v / maxVal) * R;
+      const [x, y] = pt(i, r);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    });
+  }
+
+  drawShape(valL, '#00c7ff', 0.18);
+  drawShape(valR, '#e62600', 0.18);
+
+  // Legend
+  document.getElementById('radar-legend').innerHTML =
+    `<span style="color:#00c7ff">■ ${M.nameL}</span>` +
+    `<span style="color:#e62600">■ ${M.nameR}</span>`;
+
+  // ── Tally table below radar ────────────────────────────────────────────────
   const statsEl = document.getElementById('stats-list');
-  const maxHits = Math.max(hitsL, hitsR, 1);
-  statsEl.innerHTML =
-    `<div class="stat-bar-r"><span class="stat-bar-l">${M.nameL} hits</span>` +
-    `<div class="stat-bar-b" style="width:${hitsL/maxHits*120}px"></div>` +
-    `<span class="stat-bar-n">${hitsL}</span></div>` +
-    `<div class="stat-bar-r"><span class="stat-bar-l">${M.nameR} hits</span>` +
-    `<div class="stat-bar-b" style="width:${hitsR/maxHits*120}px;background:var(--R)"></div>` +
-    `<span class="stat-bar-n">${hitsR}</span></div>` +
-    `<div class="stat-bar-r"><span class="stat-bar-l">Cards (L/R)</span>` +
-    `<span class="stat-bar-n">${M.cardsL.length} / ${M.cardsR.length}</span></div>`;
+  let rows = `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:4px 0 6px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 28px 28px;gap:4px">
+    <span>ACTION</span><span style="color:#00c7ff;text-align:right">${M.nameL.substring(0,4).toUpperCase()}</span><span style="color:#e62600;text-align:right">${M.nameR.substring(0,4).toUpperCase()}</span></div>`;
+  RADAR_AXES.forEach((ax, i) => {
+    const vl = valL[i], vr = valR[i];
+    if (vl === 0 && vr === 0) return; // skip unused actions
+    rows += `<div style="display:grid;grid-template-columns:1fr 28px 28px;gap:4px;padding:4px 0;border-bottom:1px solid var(--s2);font-size:12px">
+      <span style="color:var(--text)">${ax.label}</span>
+      <span style="color:#00c7ff;text-align:right;font-family:var(--mono)">${vl}</span>
+      <span style="color:#e62600;text-align:right;font-family:var(--mono)">${vr}</span></div>`;
+  });
+  // Always show summary totals
+  rows += `<div style="display:grid;grid-template-columns:1fr 28px 28px;gap:4px;padding:6px 0;font-size:12px;font-weight:700">
+    <span style="color:var(--muted);font-family:var(--mono);font-size:10px">TOTAL ACTIONS</span>
+    <span style="color:#00c7ff;text-align:right;font-family:var(--mono)">${valL.reduce((a,b)=>a+b,0)}</span>
+    <span style="color:#e62600;text-align:right;font-family:var(--mono)">${valR.reduce((a,b)=>a+b,0)}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 28px 28px;gap:4px;padding:4px 0;font-size:12px">
+    <span style="color:var(--muted);font-family:var(--mono);font-size:10px">CARDS</span>
+    <span style="color:#00c7ff;text-align:right;font-family:var(--mono)">${M.cardsL.length}</span>
+    <span style="color:#e62600;text-align:right;font-family:var(--mono)">${M.cardsR.length}</span></div>`;
+  statsEl.innerHTML = rows;
 }
 
 // ── Load JSON ─────────────────────────────────────────────────────────────────
