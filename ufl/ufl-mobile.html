@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>UFL Fencing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Exo+2:wght@600;700;800&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#07080c;--s1:#0d0f16;--s2:#141720;
@@ -105,17 +108,17 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .conf-offtarget{background:#92400e;color:#fff}
 .conf-label{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:1px;text-align:center}
 
-/* ── PIE MENU ── */
-.pie-wrap{position:absolute;inset:0;display:none;align-items:flex-end;z-index:25;background:rgba(0,0,0,0.35)}
-.pie-wrap.on{display:flex}
-.pie-wrap.pie-left{justify-content:flex-start;padding:0 0 18px 10px}
-.pie-wrap.pie-right{justify-content:flex-end;padding:0 10px 18px 0}
-.pie-canvas-wrap{position:relative;width:220px;height:220px}
-.pie-canvas-wrap canvas{position:absolute;top:0;left:0}
-.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:88px;height:88px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:12px;font-weight:700;color:#fff;text-align:center;padding:4px;pointer-events:none;z-index:5}
-.pie-close{position:absolute;top:-12px;width:36px;height:36px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;z-index:6}
-.pie-wrap.pie-left .pie-close{right:-12px}
-.pie-wrap.pie-right .pie-close{left:-12px}
+/* ── SVG RADIAL MENU ── */
+#radial-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:25;background:rgba(0,0,0,0.84);transition:opacity .2s;touch-action:none}
+#r-svgwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none}
+#r-svg{display:block;touch-action:none;width:min(320px,92vmin);height:min(320px,92vmin)}
+.radial-cancel-btn{margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.32);padding:7px 24px;border-radius:2px;font-size:9px;font-family:var(--mono);letter-spacing:2.5px}
+@keyframes r-sector-in{from{opacity:0;transform:scale(.1)}to{opacity:1;transform:scale(1)}}
+@keyframes r-sector-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.1)}}
+@keyframes r-pulse-ring{0%{r:138;opacity:.85}100%{r:168;opacity:0}}
+.r-sector-in{animation:r-sector-in .32s cubic-bezier(.16,1,.3,1) forwards;transform-origin:160px 160px;transform-box:view-box}
+.r-sector-out{animation:r-sector-out .18s ease-in forwards;transform-origin:160px 160px;transform-box:view-box}
+.r-pulse-anim{animation:r-pulse-ring .65s ease-out forwards}
 
 /* ── SCREEN 2: RESULT ── */
 #s-result{flex-direction:column;background:var(--bg);justify-content:space-between;padding:16px}
@@ -328,20 +331,31 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     </div>
   </div>
 
-  <!-- Pie menus -->
-  <div class="pie-wrap pie-left" id="pie-l">
-    <div class="pie-canvas-wrap">
-      <canvas id="pie-canvas-l" width="220" height="220"></canvas>
-      <div class="pie-center" id="pie-center-l"></div>
-      <button class="pie-close" id="pie-close-l">✕</button>
+  <!-- SVG Radial menu overlay (centered, full-screen) -->
+  <div id="radial-overlay">
+    <div id="r-svgwrap">
+      <svg id="r-svg" viewBox="0 0 320 320">
+        <defs>
+          <filter id="r-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="r-gsm" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle id="r-track1" cx="160" cy="160" r="145" fill="none" stroke="#111825" stroke-width="1.5" opacity="0" style="transition:opacity .3s .12s"/>
+        <circle id="r-track2" cx="160" cy="160" r="139" fill="none" stroke="#090e18" stroke-width=".8" opacity="0" style="transition:opacity .3s .18s"/>
+        <g id="r-slices"></g>
+        <line id="r-indicator" x1="160" y1="160" x2="160" y2="160" stroke="#888" stroke-width="1.2" stroke-dasharray="4 5" opacity=".55" display="none"/>
+        <circle id="r-pulse-ring" cx="160" cy="160" r="138" fill="none" stroke="#888" stroke-width="1.5" opacity="0"/>
+        <circle id="r-center-disc" cx="160" cy="160" r="44" fill="#07080c" stroke="#888" stroke-width="1" opacity="0" style="transition:opacity .25s .2s"/>
+        <text id="r-center-top" x="160" y="153" text-anchor="middle" dominant-baseline="middle" fill="#888" font-size="7.5" font-family="'Share Tech Mono',monospace" letter-spacing="1.5" filter="url(#r-gsm)" opacity="0" style="transition:opacity .2s .25s"></text>
+        <text id="r-center-bot" x="160" y="167" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,.22)" font-size="6.5" font-family="'Share Tech Mono',monospace" opacity="0" style="transition:opacity .2s .28s"></text>
+      </svg>
     </div>
-  </div>
-  <div class="pie-wrap pie-right" id="pie-r">
-    <div class="pie-canvas-wrap">
-      <canvas id="pie-canvas-r" width="220" height="220"></canvas>
-      <div class="pie-center" id="pie-center-r"></div>
-      <button class="pie-close" id="pie-close-r">✕</button>
-    </div>
+    <button id="radial-cancel" class="radial-cancel-btn">✕  CANCEL</button>
   </div>
 </div>
 
@@ -745,165 +759,294 @@ document.getElementById('ev-back').addEventListener('touchend', e => {
   showScreen(M && M.finished ? 's-result' : 's-match');
 }, {passive:false});
 
-// ── Pie menu ──────────────────────────────────────────────────────────────────
-function drawPie(side, menuType) {
-  const canvasId = side === 'L' ? 'pie-canvas-l' : 'pie-canvas-r';
-  const centerId = side === 'L' ? 'pie-center-l' : 'pie-center-r';
-  const canvas   = document.getElementById(canvasId);
-  const ctx      = canvas.getContext('2d');
-  const cx = 110, cy = 110, outerR = 105, innerR = 44;
-  const sectors  = PIE_SECTORS[menuType] || [];
-  const n        = sectors.length;
-  const arc      = (2 * Math.PI) / n;
-  ctx.clearRect(0, 0, 220, 220);
+// ── SVG Radial menu ───────────────────────────────────────────────────────────
+const RADIAL_DEFS = {
+  MAIN: {
+    label:'ACTION', color:'#888',
+    sectors:[
+      {id:'OFF', label:'OFFENSE',  color:'#16a34a', dark:'#0a2612', branch:'OFFENSE'},
+      {id:'DEF', label:'DEFENSE',  color:'#dc2626', dark:'#2a0707', branch:'DEF_ROW'},
+      {id:'NON', label:'NONE',     color:'#2563eb', dark:'#071029', branch:'NONE'},
+      {id:'CRD', label:'CARDS',    color:'#d97706', dark:'#1a0e02', branch:'CARD'},
+    ]
+  },
+  OFFENSE: {
+    label:'OFFENSE', color:'#16a34a', dark:'#0a2612',
+    sectors:[
+      {id:'SA', label:'Simple',    offset:0},
+      {id:'CA', label:'Compound',  offset:1},
+      {id:'FL', label:'Flèche',    offset:2},
+      {id:'BA', label:'Beat Att.', offset:3},
+      {id:'PF', label:'Prise Fer', offset:4},
+    ]
+  },
+  DEF_ROW: {
+    label:'DEFENSE', color:'#dc2626', dark:'#2a0707',
+    sectors:[
+      {id:'PR', label:'Parry-Rip.', offset:10},
+      {id:'PL', label:'Pt in Line', offset:12},
+      {id:'AP', label:'Atk in Prep',offset:13},
+      {id:'NT', label:'No-Att Tch', offset:14},
+    ]
+  },
+  NONE: {
+    label:'NO ROW', color:'#2563eb', dark:'#071029',
+    sectors:[
+      {id:'CO', label:'Counterattk',offset:20},
+      {id:'RE', label:'Remise',      offset:21},
+      {id:'CN', label:'Continuat.',  offset:22},
+      {id:'SI', label:'Simultan.',   offset:23},
+    ]
+  },
+  CARD: {
+    label:'CARDS', color:'#d97706', dark:'#1a0e02',
+    sectors:[
+      {id:'YC', label:'Yellow',     offset:90},
+      {id:'RC', label:'Red (+1)',   offset:91},
+      {id:'OT', label:'Off-Target', offset:40},
+      {id:'OB', label:'Out Bounds', offset:41},
+      {id:'HL', label:'Halt',       actionId:1},
+      {id:'VR', label:'Video Rev.', actionId:3},
+    ]
+  },
+};
 
-  // Fallback colors when sector has no per-sector color defined
-  const sideStroke = side === 'L' ? '#00c7ff' : '#e62600';
-  const sideFill   = side === 'L' ? 'rgba(0,199,255,0.22)' : 'rgba(230,38,0,0.22)';
+// Geometry constants (viewBox 320×320, center 160,160)
+const _CX=160,_CY=160,_OR=134,_IR=50,_GAP=3;
+const _LR=_IR+(_OR-_IR)*0.5, _IDR=_IR+(_OR-_IR)*0.18;
+const _d2r=a=>((a-90)*Math.PI)/180;
+const _pt=(r,a)=>[_CX+r*Math.cos(_d2r(a)),_CY+r*Math.sin(_d2r(a))];
+const _f=n=>n.toFixed(2);
 
-  // Sub-menu header color reflects the category
-  const categoryColor = {
-    [MENU_OFFENSE]: '#16a34a',
-    [MENU_DEF_ROW]: '#dc2626',
-    [MENU_NONE]:    '#2563eb',
-    [MENU_CARD]:    '#d97706',
-  };
+function _arcPath(s,e,outerR,innerR,gap){
+  outerR=outerR??_OR; innerR=innerR??_IR; gap=gap??_GAP;
+  const sa=s+gap,ea=e-gap,la=ea-sa>180?1:0;
+  const[ox1,oy1]=_pt(outerR,sa),[ox2,oy2]=_pt(outerR,ea);
+  const[ix1,iy1]=_pt(innerR,sa),[ix2,iy2]=_pt(innerR,ea);
+  return`M${_f(ix1)},${_f(iy1)} L${_f(ox1)},${_f(oy1)} A${outerR},${outerR} 0 ${la},1 ${_f(ox2)},${_f(oy2)} L${_f(ix2)},${_f(iy2)} A${innerR},${innerR} 0 ${la},0 ${_f(ix1)},${_f(iy1)}Z`;
+}
 
-  sectors.forEach((sec, i) => {
-    const startA = -Math.PI / 2 + arc * i + arc * 0.02;
-    const endA   = startA + arc - arc * 0.04;
-    const stroke = sec.color    || categoryColor[menuType] || sideStroke;
-    const fill   = sec.colorFill|| (categoryColor[menuType]
-      ? categoryColor[menuType].replace(')', ',0.22)').replace('rgb','rgba')
-      : sideFill);
+function _svgEl(tag,attrs){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);
+  return el;
+}
 
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, outerR, startA, endA);
-    ctx.closePath();
-    ctx.fillStyle   = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth   = 2;
-    ctx.fill();
-    ctx.stroke();
+// Radial state
+let _radSide=null,_radPhase='idle',_radMenu=null,_radStack=[],_radHov=null,_radEls=[];
+let _rSlicesG,_rCenterDisc,_rCenterTop,_rCenterBot,_rIndicator,_rPulseRing,_rTrack1,_rTrack2;
 
-    // Emoji + label
-    const midA   = startA + (endA - startA) / 2;
-    const labelR = (outerR + innerR) / 2;
-    const ex = cx + Math.cos(midA) * (labelR - 4);
-    const ey = cy + Math.sin(midA) * (labelR - 4);
-    ctx.font = '20px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(sec.emoji, ex, ey - 9);
-    ctx.font = `bold 9px monospace`;
-    ctx.fillStyle = menuType === MENU_MAIN ? stroke : 'rgba(255,255,255,0.85)';
-    ctx.fillText(sec.label.toUpperCase().substring(0, 9), ex, ey + 9);
+function _radBuildSlices(menuKey){
+  const def=RADIAL_DEFS[menuKey]; if(!def) return [];
+  const n=def.sectors.length;
+  const col=def.color||'#888', dark=def.dark||'#111';
+  const els=[];
+  // Ensure gradient exists in defs
+  const svgEl=document.getElementById('r-svg');
+  const defs=svgEl.querySelector('defs');
+  const gradId='rg-'+menuKey.toLowerCase();
+  if(!document.getElementById(gradId)){
+    const rg=_svgEl('radialGradient',{id:gradId,cx:'50%',cy:'50%',r:'50%'});
+    rg.appendChild(_svgEl('stop',{'offset':'0%','stop-color':col,'stop-opacity':'.5'}));
+    rg.appendChild(_svgEl('stop',{'offset':'100%','stop-color':col,'stop-opacity':'.1'}));
+    defs.appendChild(rg);
+  }
+  def.sectors.forEach((sec,i)=>{
+    const sz=360/n,s=sz*i,e=sz*(i+1),mid=sz*i+sz/2;
+    const sc=sec.color||col, sd=sec.dark||dark;
+    const[lx,ly]=_pt(_LR,mid),[bx,by]=_pt(_IDR,mid);
+    const g=_svgEl('g',{});
+    g.style.display='none'; g.style.opacity='0';
+    g.style.transformOrigin=`${_CX}px ${_CY}px`;
+    const glow=_svgEl('path',{d:_arcPath(s,e,_OR+16,_IR-3,_GAP-1),fill:sc,opacity:'.08'});
+    glow.style.display='none'; glow.style.pointerEvents='none';
+    g.appendChild(glow);
+    const arc=_svgEl('path',{d:_arcPath(s,e,_OR,_IR),fill:sd,stroke:sc,'stroke-width':'.45'});
+    arc.style.pointerEvents='none'; arc.style.transition='all .13s ease';
+    g.appendChild(arc);
+    const idTxt=_svgEl('text',{x:bx,y:by,'text-anchor':'middle','dominant-baseline':'middle',
+      fill:sc,opacity:'.6','font-size':'7','font-family':"'Share Tech Mono',monospace",'font-weight':'bold'});
+    idTxt.style.pointerEvents='none'; idTxt.style.transition='all .13s';
+    idTxt.textContent=sec.id; g.appendChild(idTxt);
+    const lbl=_svgEl('text',{x:lx,y:ly,'text-anchor':'middle','dominant-baseline':'middle',
+      fill:sc,'font-size':'10','font-family':"'Barlow Condensed','Exo 2',sans-serif",'font-weight':'700','letter-spacing':'.8'});
+    lbl.style.pointerEvents='none'; lbl.style.transition='all .13s';
+    lbl.textContent=sec.label; g.appendChild(lbl);
+    if(sec.branch){
+      const[ax,ay]=_pt(_LR+13,mid);
+      const arr=_svgEl('text',{x:ax,y:ay,'text-anchor':'middle','dominant-baseline':'middle',
+        fill:sc,opacity:'.5','font-size':'9','font-family':"'Share Tech Mono',monospace"});
+      arr.style.pointerEvents='none'; arr.textContent='›'; g.appendChild(arr);
+    }
+    _rSlicesG.appendChild(g);
+    els.push({g,glow,arc,idTxt,lbl,data:sec,s,e,mid,col:sc,dark:sd,gradId});
   });
+  return els;
+}
 
-  // Inner ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
-  ctx.fillStyle = '#07080c';
-  ctx.fill();
-  const ringColor = categoryColor[menuType] || sideStroke;
-  ctx.strokeStyle = ringColor;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  const centerEl = document.getElementById(centerId);
-  if (menuType === MENU_MAIN) {
-    centerEl.textContent = 'TAP\nACTION';
-    centerEl.style.color = '#fff';
+function _radSetHov(idx){
+  _radHov=idx;
+  _radEls.forEach(({glow,arc,idTxt,lbl,data,s,e,col,dark,gradId},i)=>{
+    const act=i===idx;
+    glow.style.display=act?'block':'none';
+    arc.setAttribute('d',_arcPath(s,e,act?_OR+8:_OR,_IR));
+    arc.setAttribute('fill',act?`url(#${gradId})`:dark);
+    arc.setAttribute('stroke-width',act?'1.6':'.45');
+    arc.setAttribute('filter',act?'url(#r-glow)':'');
+    idTxt.setAttribute('fill',act?'#fff':col);
+    idTxt.setAttribute('opacity',act?'1':'.6');
+    idTxt.setAttribute('filter',act?'url(#r-gsm)':'');
+    lbl.setAttribute('fill',act?'#fff':col);
+    lbl.setAttribute('font-weight',act?'800':'700');
+  });
+  if(idx!==null&&_radEls[idx]){
+    const{mid}=_radEls[idx];
+    const[ex,ey]=_pt(_OR-5,mid);
+    _rIndicator.setAttribute('x2',_f(ex)); _rIndicator.setAttribute('y2',_f(ey));
+    _rIndicator.setAttribute('display','block');
   } else {
-    centerEl.textContent = '← BACK';
-    centerEl.style.color = categoryColor[menuType] || sideStroke;
+    _rIndicator.setAttribute('display','none');
   }
 }
 
-function openPie(side) {
+function _radSetCenter(top,bot,col){
+  col=col||'#888';
+  _rCenterTop.textContent=top||''; _rCenterBot.textContent=bot||'';
+  _rCenterTop.setAttribute('opacity',top?'1':'0');
+  _rCenterBot.setAttribute('opacity',bot?'1':'0');
+  _rCenterTop.setAttribute('fill',col);
+  _rCenterDisc.setAttribute('stroke',col);
+  _rPulseRing.setAttribute('stroke',col);
+  _rIndicator.setAttribute('stroke',col);
+}
+
+function _radGetAD(e){
+  const svg=document.getElementById('r-svg');
+  const rect=svg.getBoundingClientRect();
+  const t=e.changedTouches?.[0]??e.touches?.[0]??e;
+  const px=((t.clientX-rect.left)/rect.width)*320;
+  const py=((t.clientY-rect.top)/rect.height)*320;
+  let a=(Math.atan2(py-_CY,px-_CX)*180)/Math.PI+90;
+  if(a<0)a+=360;
+  return{a,dist:Math.hypot(px-_CX,py-_CY)};
+}
+
+function _radAngToSlice(angle,n){
+  return Math.floor((((angle%360)+360)%360)/(360/n))%n;
+}
+
+function _radTransitionTo(menuKey,pushStack){
+  const def=RADIAL_DEFS[menuKey]; if(!def) return;
+  const col=def.color||'#888';
+  if(pushStack&&_radMenu) _radStack.push(_radMenu);
+  const prevEls=_radEls.slice();
+  prevEls.forEach(({g})=>{g.classList.remove('r-sector-in');g.classList.add('r-sector-out');});
+  setTimeout(()=>prevEls.forEach(({g})=>{if(g.parentNode)g.parentNode.removeChild(g);}),220);
+  _radMenu=menuKey; _radHov=null;
+  _rTrack1.setAttribute('opacity','1'); _rTrack2.setAttribute('opacity','1');
+  _rCenterDisc.setAttribute('opacity','1');
+  const sideTag=_radSide==='L'?'L · ':'R · ';
+  _radSetCenter(sideTag+def.label, _radStack.length?'↩  BACK':'TAP  ·  SLIDE', col);
+  _rIndicator.setAttribute('display','none');
+  _radEls=_radBuildSlices(menuKey);
+  _radEls.forEach(({g},i)=>{
+    g.style.display='block'; g.style.opacity='0';
+    setTimeout(()=>{g.classList.add('r-sector-in');g.style.opacity='1';},80+i*45);
+  });
+}
+
+function _radGoBack(){
+  if(_radStack.length>0){
+    _radTransitionTo(_radStack.pop(),false);
+  } else {
+    closePie(_radSide);
+  }
+}
+
+function _radConfirmSector(){
+  if(_radHov===null||!_radEls[_radHov]) return;
+  const sec=_radEls[_radHov].data, side=_radSide;
+  _rPulseRing.setAttribute('opacity','1');
+  _rPulseRing.classList.remove('r-pulse-anim');
+  void _rPulseRing.offsetWidth;
+  _rPulseRing.classList.add('r-pulse-anim');
+  setTimeout(()=>_rPulseRing.setAttribute('opacity','0'),700);
+  let actionId;
+  if(sec.actionId!==undefined){actionId=sec.actionId;}
+  else{const base=side==='L'?100:200; actionId=base+sec.offset;}
+  setTimeout(()=>{closePie(side); showConfirm(side,actionId);},130);
+}
+
+function _radPtrDown(e){
+  if(_radPhase==='idle') return; e.preventDefault();
+  document.getElementById('r-svgwrap').setPointerCapture(e.pointerId);
+  const{a,dist}=_radGetAD(e);
+  if(dist<_IR*0.55){_radGoBack();return;}
+  const n=_radEls.length;
+  if(n>0)_radSetHov(dist<_IR?null:_radAngToSlice(a,n));
+}
+
+function _radPtrMove(e){
+  if(_radPhase==='idle') return; e.preventDefault();
+  const{a,dist}=_radGetAD(e);
+  const n=_radEls.length;
+  if(n>0)_radSetHov(dist<_IR*0.55?null:_radAngToSlice(a,n));
+}
+
+function _radPtrUp(e){
+  if(_radPhase==='idle') return; e.preventDefault();
+  const{dist}=_radGetAD(e);
+  if(dist<_IR){_radGoBack();return;}
+  if(_radHov===null||!_radEls[_radHov]) return;
+  const sec=_radEls[_radHov].data;
+  if(sec.branch){_radTransitionTo(sec.branch,true);}
+  else{_radConfirmSector();}
+}
+
+function openPie(side){
   stopTimer();
-  const wrapId = side === 'L' ? 'pie-l' : 'pie-r';
-  PS[side === 'L' ? 'left' : 'right'] = { menuType: MENU_MAIN };
-  drawPie(side, MENU_MAIN);
-  document.getElementById(wrapId).classList.add('on');
+  _radSide=side; _radPhase='main'; _radStack=[]; _radHov=null; _radEls=[]; _radMenu=null;
+  const ov=document.getElementById('radial-overlay');
+  ov.style.display='flex'; ov.style.opacity='0';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>ov.style.opacity='1'));
+  _rTrack1.setAttribute('opacity','0'); _rTrack2.setAttribute('opacity','0');
+  _rCenterDisc.setAttribute('opacity','0');
+  _rCenterTop.setAttribute('opacity','0'); _rCenterBot.setAttribute('opacity','0');
+  _rPulseRing.setAttribute('opacity','0');
+  _rIndicator.setAttribute('display','none');
+  while(_rSlicesG.firstChild)_rSlicesG.removeChild(_rSlicesG.firstChild);
+  _radTransitionTo('MAIN',false);
 }
 
-function closePie(side) {
-  const wrapId = side === 'L' ? 'pie-l' : 'pie-r';
-  document.getElementById(wrapId).classList.remove('on');
-  PS[side === 'L' ? 'left' : 'right'] = null;
-  if (!M.finished) startTimer();
+function closePie(side){
+  _radPhase='idle'; _radHov=null; _radStack=[]; _radMenu=null; _radSide=null; _radEls=[];
+  const ov=document.getElementById('radial-overlay');
+  ov.style.opacity='0';
+  setTimeout(()=>{
+    ov.style.display='none';
+    while(_rSlicesG.firstChild)_rSlicesG.removeChild(_rSlicesG.firstChild);
+  },220);
+  if(M&&!M.finished)startTimer();
 }
 
-function sectorAtPoint(x, y, n, cx, cy, outerR, innerR) {
-  const dx = x - cx, dy = y - cy;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist < innerR || dist > outerR) return -1;
-  const arc = (2 * Math.PI) / n;
-  let angle = Math.atan2(dy, dx) + Math.PI / 2;
-  if (angle < 0) angle += 2 * Math.PI;
-  return Math.floor(angle / arc) % n;
-}
-
-function handlePieTap(e, side) {
-  e.preventDefault();
-  const psKey  = side === 'L' ? 'left' : 'right';
-  const ps     = PS[psKey];
-  if (!ps) return;
-  const canvasId = side === 'L' ? 'pie-canvas-l' : 'pie-canvas-r';
-  const canvas   = document.getElementById(canvasId);
-  const rect     = canvas.getBoundingClientRect();
-  const touch    = e.changedTouches[0];
-  const rawX     = touch.clientX - rect.left;
-  const rawY     = touch.clientY - rect.top;
-  const scaleX   = 220 / rect.width;
-  const scaleY   = 220 / rect.height;
-  const x = rawX * scaleX, y = rawY * scaleY;
-
-  const sectors = PIE_SECTORS[ps.menuType] || [];
-  const idx     = sectorAtPoint(x, y, sectors.length, 110, 110, 105, 44);
-  if (idx < 0) return;
-  const sec = sectors[idx];
-
-  // Centre tap = back
-  const dx = x - 110, dy = y - 110;
-  if (Math.sqrt(dx*dx+dy*dy) < 44) {
-    if (ps.menuType !== MENU_MAIN) {
-      PS[psKey].menuType = MENU_MAIN;
-      drawPie(side, MENU_MAIN);
-    } else {
-      closePie(side);
-    }
-    return;
-  }
-
-  if (sec.next) {
-    PS[psKey].menuType = sec.next;
-    drawPie(side, sec.next);
-  } else {
-    // Leaf action
-    let actionId;
-    if (sec.id !== undefined) {
-      actionId = sec.id;
-    } else {
-      const base = side === 'L' ? 100 : 200;
-      actionId = base + sec.offset;
-    }
-    closePie(side);
-    showConfirm(side, actionId);
-  }
-}
-
-// Wire pie canvases
-['l','r'].forEach(s => {
-  const canvas = document.getElementById(`pie-canvas-${s}`);
-  canvas.addEventListener('touchend', e => handlePieTap(e, s === 'l' ? 'L' : 'R'), {passive:false});
-  document.getElementById(`pie-close-${s}`).addEventListener('touchend', e => {
-    e.preventDefault(); closePie(s === 'l' ? 'L' : 'R');
-  }, {passive:false});
-});
+(function initRadial(){
+  _rSlicesG   =document.getElementById('r-slices');
+  _rCenterDisc=document.getElementById('r-center-disc');
+  _rCenterTop =document.getElementById('r-center-top');
+  _rCenterBot =document.getElementById('r-center-bot');
+  _rIndicator =document.getElementById('r-indicator');
+  _rPulseRing =document.getElementById('r-pulse-ring');
+  _rTrack1    =document.getElementById('r-track1');
+  _rTrack2    =document.getElementById('r-track2');
+  const wrap=document.getElementById('r-svgwrap');
+  wrap.addEventListener('pointerdown',_radPtrDown,{passive:false});
+  wrap.addEventListener('pointermove',_radPtrMove,{passive:false});
+  wrap.addEventListener('pointerup',  _radPtrUp,  {passive:false});
+  wrap.addEventListener('pointercancel',()=>{if(_radEls.length)_radSetHov(null);},{passive:false});
+  document.getElementById('radial-cancel').addEventListener('touchend',e=>{
+    e.preventDefault(); if(_radSide!==null)closePie(_radSide);
+  },{passive:false});
+})();
 
 // ── Confirm flow ──────────────────────────────────────────────────────────────
 let _pendingAction = null;
