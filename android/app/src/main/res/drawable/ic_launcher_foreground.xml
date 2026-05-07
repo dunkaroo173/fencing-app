@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- S-Class Fencing app icon: épée silhouette -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Blade -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M53,18 L55,18 L56,74 L52,74 Z" />
+
+    <!-- Guard (cross-piece) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,72 L70,72 L70,76 L38,76 Z" />
+
+    <!-- Pommel -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51,76 L57,76 L57,88 L51,88 Z" />
+
+    <!-- Tip dot -->
+    <path
+        android:fillColor="#FFCC00"
+        android:pathData="M52,16 A2,2 0 1,0 56,16 A2,2 0 1,0 52,16 Z" />
+
+</vector>
