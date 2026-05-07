@@ -78,7 +78,7 @@ dependencies {
         exclude module: 'fly-safe-database'
     }
     compileOnly('com.dji:dji-sdk-v5-aircraft-provided:5.11.0')
-    runtimeOnly('com.dji:dji-sdk-v5-networkImp:5.11.0')
+    // networkImp is optional; add manually if DJI network features are needed
 
     // AndroidX core
     implementation 'androidx.core:core-ktx:1.12.0'

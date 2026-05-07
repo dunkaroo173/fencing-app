@@ -11,8 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://developer.dji.com/maven2" }
-        maven { url "https://api.xnpe.com/maven" }   // legacy fallback
+        // DJI MSDK V5 artifacts (5.11.0+) are on Maven Central.
+        // developer.dji.com/maven2 returns 403 from CI; omitted.
         maven { url "https://jitpack.io" }
     }
 }
