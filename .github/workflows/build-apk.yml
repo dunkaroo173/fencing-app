@@ -20,38 +20,48 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
+          # No cache: gradle — we install Gradle manually below to avoid
+          # conflicts with the GitHub cache service (HTTP 400 errors).
 
-      - name: Setup Gradle 8.7
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.7'
+      # Download Gradle 8.4 directly from the Gradle distribution servers.
+      # This avoids the GitHub Actions cache service entirely and is reliable.
+      - name: Install Gradle 8.4
+        run: |
+          GRADLE_VERSION=8.4
+          curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+            -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
 
-      # The ubuntu-latest runner ships with the Android SDK; ANDROID_HOME is pre-set.
-      # Accept any pending SDK licences so aapt2/platform downloads don't block.
+      - name: Verify Gradle version
+        run: gradle --version
+
+      # Accept pending Android SDK licences so aapt2/platform downloads don't stall.
       - name: Accept Android SDK licences
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || \
+          yes | "$ANDROID_HOME/tools/bin/sdkmanager" --licenses 2>/dev/null || true
 
-      - name: Show Android SDK info
+      - name: Show Android SDK platforms
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME/platforms/" | tail -5
+          ls "$ANDROID_HOME/platforms/" | tail -6
 
-      - name: Validate Gradle files
+      - name: Validate project files
         run: |
           echo "=== settings.gradle ==="
           cat android/settings.gradle
           echo ""
-          echo "=== app/build.gradle ==="
-          cat android/app/build.gradle
+          echo "=== app/build.gradle (deps section) ==="
+          grep -A 20 '^dependencies' android/app/build.gradle
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tail -200
         working-directory: android
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: List generated APKs
+      - name: List APK outputs
         run: find android/app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "No APKs found"
 
       - name: Upload Debug APK
@@ -62,7 +72,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build Release APK (unsigned)
-        run: gradle assembleRelease --no-daemon
+        run: gradle assembleRelease --no-daemon 2>&1 | tail -100
         working-directory: android
         continue-on-error: true
         env:
