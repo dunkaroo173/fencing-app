@@ -21,61 +21,25 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Download Gradle directly — no GitHub cache service dependency.
-      - name: Install Gradle 8.4
-        run: |
-          GRADLE_VERSION=8.4
-          echo "Downloading Gradle ${GRADLE_VERSION}..."
-          curl -fsSL \
-            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
-            -o /tmp/gradle.zip
-          echo "Downloaded $(du -sh /tmp/gradle.zip | cut -f1)"
-          unzip -q /tmp/gradle.zip -d /opt/gradle
-          echo "/opt/gradle/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
-
-      - name: Verify Gradle
-        run: gradle --version
-
       - name: Run tournament-engine unit tests
-        run: gradle test --no-daemon
+        run: ./gradlew test --no-daemon
         working-directory: tournament-engine
 
-      # Accept pending Android SDK licences.
       - name: Accept Android SDK licences
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --licenses 2>/dev/null || \
-          yes | "$ANDROID_HOME/tools/bin/sdkmanager" \
             --licenses 2>/dev/null || true
 
-      - name: Show environment
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME/platforms/" | tail -8
-          java -version
-
-      - name: Validate project files
-        run: |
-          echo "=== settings.gradle ==="
-          cat android/settings.gradle
-          echo ""
-          echo "=== app/build.gradle (deps) ==="
-          grep -A 25 '^dependencies' android/app/build.gradle
-
-      # IMPORTANT: do NOT pipe gradle output — piping masks exit code.
-      # GitHub Actions captures all stdout/stderr automatically.
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         working-directory: android
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: List APK outputs
         if: always()
         run: |
           find android/app/build/outputs -name "*.apk" 2>/dev/null \
             && echo "---" \
-            || echo "No APK files found under android/app/build/outputs"
+            || echo "No APK files found"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -85,11 +49,9 @@ jobs:
           if-no-files-found: error
 
       - name: Build Release APK (unsigned)
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
         working-directory: android
         continue-on-error: true
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
