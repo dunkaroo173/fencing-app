@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@color/background_dark">
+
+    <ImageView
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:src="@android:drawable/ic_menu_camera"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:textColor="@color/white"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="DJI Osmo Mobile Gimbal Tracker"
+        android:textSize="13sp"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="32dp" />
+
+    <!-- SDK Status -->
+    <TextView
+        android:id="@+id/tvSdkStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Initializing…"
+        android:textSize="14sp"
+        android:textColor="@color/yellow_dark"
+        android:layout_marginBottom="32dp" />
+
+    <!-- Gimbal Tracking Button -->
+    <Button
+        android:id="@+id/btnGimbalTracking"
+        android:layout_width="240dp"
+        android:layout_height="56dp"
+        android:text="Gimbal Tracking"
+        android:textSize="16sp"
+        android:backgroundTint="@color/blue_primary"
+        android:layout_marginBottom="16dp"
+        android:enabled="false" />
+
+    <!-- Tournament Manager Button -->
+    <Button
+        android:id="@+id/btnTournament"
+        android:layout_width="240dp"
+        android:layout_height="56dp"
+        android:text="Tournament Manager"
+        android:textSize="16sp"
+        android:backgroundTint="@color/green"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="S-Class Fencing v1.0"
+        android:textSize="11sp"
+        android:textColor="#666666"
+        android:layout_marginTop="32dp" />
+
+</LinearLayout>

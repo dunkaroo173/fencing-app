@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="@color/background_dark">
+
+    <!-- Left: Camera / Feed Placeholder -->
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1.4"
+        android:background="#111111">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Camera Feed\n(DJI Live View)"
+            android:textColor="#555555"
+            android:textSize="16sp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tvTrackingStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="16dp"
+            android:text="STANDBY"
+            android:textColor="@color/yellow_dark"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="#80000000"
+            android:padding="8dp" />
+
+    </FrameLayout>
+
+    <!-- Right: Controls Panel -->
+    <LinearLayout
+        android:id="@+id/layoutControls"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.6"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:gravity="center_horizontal">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:text="← Back"
+            android:backgroundTint="#333333"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvConnectionStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Checking…"
+            android:textColor="@color/yellow_dark"
+            android:textSize="12sp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- No device message -->
+        <TextView
+            android:id="@+id/tvNoDevice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect your DJI Osmo Mobile via Bluetooth to enable gimbal control."
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:visibility="gone" />
+
+        <!-- Tracking Button -->
+        <Button
+            android:id="@+id/btnStartTracking"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Start Tracking"
+            android:backgroundTint="@color/blue_primary"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- D-Pad Gimbal Control -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GIMBAL CONTROL"
+            android:textColor="#888888"
+            android:textSize="11sp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnGimbalUp"
+            android:layout_width="60dp"
+            android:layout_height="48dp"
+            android:text="▲"
+            android:backgroundTint="#333333" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnGimbalLeft"
+                android:layout_width="60dp"
+                android:layout_height="48dp"
+                android:text="◄"
+                android:backgroundTint="#333333"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnGimbalCenter"
+                android:layout_width="60dp"
+                android:layout_height="48dp"
+                android:text="●"
+                android:backgroundTint="#555555"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnGimbalRight"
+                android:layout_width="60dp"
+                android:layout_height="48dp"
+                android:text="►"
+                android:backgroundTint="#333333" />
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnGimbalDown"
+            android:layout_width="60dp"
+            android:layout_height="48dp"
+            android:text="▼"
+            android:backgroundTint="#333333"
+            android:layout_marginTop="0dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

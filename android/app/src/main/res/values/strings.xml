@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">S-Class Fencing</string>
+    <string name="gimbal_tracking">Gimbal Tracking</string>
+    <string name="tournament_manager">Tournament Manager</string>
+    <string name="sdk_status_connecting">Connecting to DJI SDK…</string>
+    <string name="sdk_status_ready">SDK Ready</string>
+    <string name="sdk_status_failed">SDK Registration Failed</string>
+    <string name="no_device_connected">No DJI device connected</string>
+    <string name="start_tracking">Start Tracking</string>
+    <string name="stop_tracking">Stop Tracking</string>
+</resources>
