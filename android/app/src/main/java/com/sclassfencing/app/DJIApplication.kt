@@ -55,8 +55,7 @@ class DJIApplication : Application() {
 
             override fun onRegisterFailure(error: IDJIError?) {
                 isSDKRegistered = false
-                // IDJIError.description() is the human-readable message.
-                Log.e(TAG, "DJI SDK registration failed: ${error?.description()}")
+                Log.e(TAG, "DJI SDK registration failed: $error")
             }
 
             // NOTE: the SDK passes an int product-type ID, not a ProductType enum.
