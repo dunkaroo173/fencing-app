@@ -36,6 +36,10 @@ jobs:
       - name: Verify Gradle
         run: gradle --version
 
+      - name: Run tournament-engine unit tests
+        run: gradle test --no-daemon
+        working-directory: tournament-engine
+
       # Accept pending Android SDK licences.
       - name: Accept Android SDK licences
         run: |

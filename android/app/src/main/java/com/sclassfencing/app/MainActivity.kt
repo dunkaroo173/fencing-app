@@ -51,17 +51,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSDKStatus() {
-        val connected = DJIApplication.connectedProductType
         if (DJIApplication.isSDKRegistered) {
-            if (connected != null) {
-                binding.tvSdkStatus.text = "Connected: ${connected.name}"
+            if (DJIApplication.isDeviceConnected) {
+                binding.tvSdkStatus.text = "Connected (product id ${DJIApplication.connectedProductTypeId})"
                 binding.tvSdkStatus.setTextColor(getColor(R.color.green))
-                binding.btnGimbalTracking.isEnabled = true
             } else {
                 binding.tvSdkStatus.text = "SDK Ready – No device paired"
                 binding.tvSdkStatus.setTextColor(getColor(R.color.yellow_dark))
-                binding.btnGimbalTracking.isEnabled = true
             }
+            binding.btnGimbalTracking.isEnabled = true
         } else {
             binding.tvSdkStatus.text = "Registering DJI SDK…"
             binding.tvSdkStatus.setTextColor(getColor(R.color.red))
