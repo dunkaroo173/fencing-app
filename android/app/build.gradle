@@ -71,12 +71,14 @@ android {
 }
 
 dependencies {
-    // DJI Mobile SDK V5 (Osmo Mobile 6 and other DJI products)
-    implementation('com.dji:dji-sdk-v5-aircraft:5.9.0') {
+    // DJI Mobile SDK V5 — Osmo Mobile 6 and other DJI products
+    // NOTE: artifact suffix is "-provided" (not "-provide") and networkImp is required at runtime
+    implementation('com.dji:dji-sdk-v5-aircraft:5.11.0') {
         exclude module: 'library-anti-distortion'
         exclude module: 'fly-safe-database'
     }
-    compileOnly('com.dji:dji-sdk-v5-aircraft-provide:5.9.0')
+    compileOnly('com.dji:dji-sdk-v5-aircraft-provided:5.11.0')
+    runtimeOnly('com.dji:dji-sdk-v5-networkImp:5.11.0')
 
     // AndroidX core
     implementation 'androidx.core:core-ktx:1.12.0'

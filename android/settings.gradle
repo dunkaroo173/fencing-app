@@ -11,7 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://api.xnpe.com/maven" }
+        maven { url "https://developer.dji.com/maven2" }
+        maven { url "https://api.xnpe.com/maven" }   // legacy fallback
         maven { url "https://jitpack.io" }
     }
 }

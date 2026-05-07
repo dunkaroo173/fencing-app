@@ -20,25 +20,39 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
       - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # The ubuntu-latest runner ships with the Android SDK; ANDROID_HOME is pre-set.
+      # Accept any pending SDK licences so aapt2/platform downloads don't block.
+      - name: Accept Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Show Android SDK info
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms/" | tail -5
 
       - name: Validate Gradle files
         run: |
-          echo "--- settings.gradle ---"
+          echo "=== settings.gradle ==="
           cat android/settings.gradle
-          echo "--- app/build.gradle ---"
+          echo ""
+          echo "=== app/build.gradle ==="
           cat android/app/build.gradle
 
       - name: Build Debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
         working-directory: android
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: List generated APKs
+        run: find android/app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "No APKs found"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -51,6 +65,8 @@ jobs:
         run: gradle assembleRelease --no-daemon
         working-directory: android
         continue-on-error: true
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4

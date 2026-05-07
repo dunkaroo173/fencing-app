@@ -6,12 +6,6 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.sclassfencing.app.databinding.ActivityGimbalTrackingBinding
-import dji.v5.common.callback.CommonCallbacks
-import dji.v5.common.error.IDJIError
-import dji.v5.et.product.ProductType
-import dji.v5.manager.KeyManager
-import dji.v5.manager.SDKManager
-import dji.v5.utils.common.DjiSharedPreferencesManager
 
 /**
  * Controls DJI Osmo Mobile gimbal for tracking fencers during bouts.

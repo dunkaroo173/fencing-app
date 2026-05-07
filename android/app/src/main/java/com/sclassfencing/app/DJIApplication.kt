@@ -26,11 +26,12 @@ class DJIApplication : Application() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
         MultiDex.install(this)
-        // DJI SDK requires this helper for class loading
+        // DJI SDK requires this for class-loading on Android < 5 and for
+        // multidex splitting of the large SDK AAR.
         try {
             com.secneo.sdk.Helper.install(this)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to install DJI Helper: ${e.message}")
+            Log.e(TAG, "DJI Helper install failed: ${e.message}")
         }
     }
 
@@ -41,14 +42,17 @@ class DJIApplication : Application() {
 
     private fun initDJISDK() {
         SDKManager.getInstance().init(this, object : SDKManagerCallback {
+
             override fun onRegisterSuccess() {
                 isSDKRegistered = true
-                Log.i(TAG, "DJI SDK registered successfully")
+                Log.i(TAG, "DJI SDK registered OK")
             }
 
             override fun onRegisterFailure(error: IDJIError?) {
                 isSDKRegistered = false
-                Log.e(TAG, "DJI SDK registration failed: ${error?.description()}")
+                // IDJIError.errorDescription() or .description() depending on SDK version
+                val msg = runCatching { error?.toString() }.getOrDefault("unknown")
+                Log.e(TAG, "DJI SDK registration failed: $msg")
             }
 
             override fun onProductDisconnect(productType: ProductType) {
@@ -70,11 +74,11 @@ class DJIApplication : Application() {
                 event: SDKManagerCallback.InitializationEvent,
                 totalProgress: Int
             ) {
-                Log.d(TAG, "SDK init progress: $event ($totalProgress%)")
+                Log.d(TAG, "SDK init: $event  progress=$totalProgress%")
             }
 
             override fun onDatabaseDownloadProgress(current: Long, total: Long) {
-                Log.d(TAG, "Database download: $current / $total")
+                Log.d(TAG, "DB download $current/$total")
             }
         })
     }
