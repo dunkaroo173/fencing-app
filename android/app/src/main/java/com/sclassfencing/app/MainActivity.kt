@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -13,6 +15,15 @@ import com.sclassfencing.app.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private val handler = Handler(Looper.getMainLooper())
+    private val statusPoller = object : Runnable {
+        override fun run() {
+            updateSDKStatus()
+            if (!DJIApplication.isSDKRegistered && DJIApplication.sdkInitError == null) {
+                handler.postDelayed(this, 1500)
+            }
+        }
+    }
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.BLUETOOTH_SCAN,
@@ -34,6 +45,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateSDKStatus()
+        handler.post(statusPoller)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(statusPoller)
     }
 
     private fun setupUI() {
@@ -51,19 +68,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSDKStatus() {
-        if (DJIApplication.isSDKRegistered) {
-            if (DJIApplication.isDeviceConnected) {
+        val error = DJIApplication.sdkInitError
+        when {
+            DJIApplication.isSDKRegistered && DJIApplication.isDeviceConnected -> {
                 binding.tvSdkStatus.text = "Connected (product id ${DJIApplication.connectedProductTypeId})"
                 binding.tvSdkStatus.setTextColor(getColor(R.color.green))
-            } else {
+                binding.btnGimbalTracking.isEnabled = true
+            }
+            DJIApplication.isSDKRegistered -> {
                 binding.tvSdkStatus.text = "SDK Ready – No device paired"
                 binding.tvSdkStatus.setTextColor(getColor(R.color.yellow_dark))
+                binding.btnGimbalTracking.isEnabled = true
             }
-            binding.btnGimbalTracking.isEnabled = true
-        } else {
-            binding.tvSdkStatus.text = "Registering DJI SDK…"
-            binding.tvSdkStatus.setTextColor(getColor(R.color.red))
-            binding.btnGimbalTracking.isEnabled = false
+            error != null -> {
+                binding.tvSdkStatus.text = "SDK Error: $error"
+                binding.tvSdkStatus.setTextColor(getColor(R.color.red))
+                binding.btnGimbalTracking.isEnabled = false
+            }
+            else -> {
+                binding.tvSdkStatus.text = "Registering DJI SDK…"
+                binding.tvSdkStatus.setTextColor(getColor(R.color.yellow_dark))
+                binding.btnGimbalTracking.isEnabled = false
+            }
         }
     }
 
