@@ -57,27 +57,18 @@ android {
             ]
         }
         jniLibs {
-            keepDebugSymbols += [
-                '*/*/libdjivideo.so',
-                '*/*/libDJIFlySafeCore-CSDK.so',
-                '*/*/libFlightRecordKit.so',
-                '*/*/libdjis_mobile_sdk.so',
-                '*/*/libdji_innertools.so',
-                '*/*/libDJIUpgradeCore.so',
-                '*/*/libDJIUpgradeJNI.so'
-            ]
+            keepDebugSymbols += ['**/*.so']
         }
     }
 }
 
 dependencies {
-    // DJI Mobile SDK V5 — Osmo Mobile 6 and other DJI products
-    // NOTE: artifact suffix is "-provided" (not "-provide") and networkImp is required at runtime
-    implementation('com.dji:dji-sdk-v5-aircraft:5.11.0') {
+    // DJI Mobile SDK V5 — Osmo Mobile 7 (handheld stabilizer, not aircraft)
+    implementation('com.dji:dji-sdk-v5-handheld:5.11.0') {
         exclude module: 'library-anti-distortion'
         exclude module: 'fly-safe-database'
     }
-    implementation('com.dji:dji-sdk-v5-aircraft-provided:5.11.0')
+    implementation('com.dji:dji-sdk-v5-handheld-provided:5.11.0')
     // networkImp is optional; add manually if DJI network features are needed
 
     // AndroidX core

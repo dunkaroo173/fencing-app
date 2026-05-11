@@ -40,6 +40,8 @@ class DJIApplication : Application() {
             Log.e(TAG, "MultiDex install failed: ${e.message}")
         }
         try {
+            // com.secneo.sdk.Helper is in the runtime handheld artifact, not the provided one.
+            // Must be called via reflection to avoid compile-time unresolved reference.
             val cls = Class.forName("com.secneo.sdk.Helper")
             cls.getMethod("install", Application::class.java).invoke(null, this)
             Log.i(TAG, "DJI Helper installed")
