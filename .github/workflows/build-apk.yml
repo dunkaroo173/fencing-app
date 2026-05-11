@@ -10,8 +10,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2"
 
     steps:
       - name: Checkout repository
@@ -23,9 +25,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
       - name: Run tournament-engine unit tests
-        run: ./gradlew test --no-daemon
+        run: ./gradlew test --no-daemon --info
         working-directory: tournament-engine
+        timeout-minutes: 10
 
       - name: Accept Android SDK licences
         run: |
@@ -33,8 +45,9 @@ jobs:
             --licenses 2>/dev/null || true
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace --info
         working-directory: android
+        timeout-minutes: 20
 
       - name: List APK outputs
         if: always()
@@ -54,6 +67,7 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon --stacktrace
         working-directory: android
         continue-on-error: true
+        timeout-minutes: 20
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
