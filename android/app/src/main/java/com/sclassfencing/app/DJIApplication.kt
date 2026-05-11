@@ -4,13 +4,10 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.multidex.MultiDex
-import com.secneo.sdk.Helper
-import dji.common.error.DJIError
-import dji.common.product.Model
-import dji.sdk.base.BaseComponent
-import dji.sdk.base.BaseProduct
-import dji.sdk.sdkmanager.DJISDKInitEvent
-import dji.sdk.sdkmanager.DJISDKManager
+import dji.v5.common.error.IDJIError
+import dji.v5.common.register.DJISDKInitEvent
+import dji.v5.manager.SDKManager
+import dji.v5.manager.interfaces.SDKManagerCallback
 import java.util.concurrent.Executors
 
 class DJIApplication : Application() {
@@ -21,14 +18,14 @@ class DJIApplication : Application() {
         @Volatile var isSDKRegistered = false
             private set
 
-        @Volatile var connectedProduct: BaseProduct? = null
+        @Volatile var connectedProductTypeId: Int = -1
             private set
 
         @Volatile var sdkInitError: String? = null
             private set
 
-        val isDeviceConnected get() = connectedProduct?.isConnected == true
-        val connectedModelName get() = connectedProduct?.model?.displayName ?: "Unknown"
+        val isDeviceConnected get() = connectedProductTypeId >= 0
+        val connectedModelName get() = if (connectedProductTypeId >= 0) "OM 7P ($connectedProductTypeId)" else "None"
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -37,10 +34,11 @@ class DJIApplication : Application() {
         super.attachBaseContext(base)
         try { MultiDex.install(this) } catch (e: Exception) { Log.e(TAG, "MultiDex: ${e.message}") }
         try {
-            Helper.install(this)
+            val cls = Class.forName("com.secneo.sdk.Helper")
+            cls.getMethod("install", Application::class.java).invoke(null, this)
             Log.i(TAG, "DJI Helper installed")
         } catch (e: Exception) {
-            Log.e(TAG, "DJI Helper failed: ${e.message}")
+            Log.w(TAG, "DJI Helper not available: ${e.message}")
         }
     }
 
@@ -51,44 +49,37 @@ class DJIApplication : Application() {
 
     private fun initDJISDK() {
         try {
-            DJISDKManager.getInstance().registerApp(this, object : DJISDKManager.SDKManagerCallback {
+            SDKManager.getInstance().init(this, object : SDKManagerCallback {
 
-                override fun onRegister(error: DJIError?) {
-                    if (error == DJIError.REGISTRATION_SUCCESS || error == null) {
-                        isSDKRegistered = true
-                        sdkInitError = null
-                        Log.i(TAG, "DJI SDK v4 registered OK")
-                        DJISDKManager.getInstance().startConnectionToProduct()
-                    } else {
-                        isSDKRegistered = false
-                        sdkInitError = "Registration failed: ${error.description}"
-                        Log.e(TAG, sdkInitError!!)
-                    }
+                override fun onRegisterSuccess() {
+                    isSDKRegistered = true
+                    sdkInitError = null
+                    Log.i(TAG, "DJI SDK registered OK")
                 }
 
-                override fun onProductDisconnect() {
-                    connectedProduct = null
+                override fun onRegisterFailure(error: IDJIError?) {
+                    isSDKRegistered = false
+                    sdkInitError = "Registration failed: $error"
+                    Log.e(TAG, sdkInitError!!)
+                }
+
+                override fun onProductDisconnect(productTypeId: Int) {
+                    connectedProductTypeId = -1
                     Log.i(TAG, "Product disconnected")
                 }
 
-                override fun onProductConnect(product: BaseProduct?) {
-                    connectedProduct = product
-                    Log.i(TAG, "Product connected: ${product?.model?.displayName}")
+                override fun onProductConnect(productTypeId: Int) {
+                    connectedProductTypeId = productTypeId
+                    Log.i(TAG, "Product connected typeId=$productTypeId")
                 }
 
-                override fun onProductChanged(product: BaseProduct?) {
-                    connectedProduct = product
-                    Log.i(TAG, "Product changed: ${product?.model?.displayName}")
+                override fun onProductChanged(productTypeId: Int) {
+                    connectedProductTypeId = productTypeId
+                    Log.i(TAG, "Product changed typeId=$productTypeId")
                 }
 
-                override fun onComponentChange(
-                    key: BaseProduct.ComponentKey?,
-                    old: BaseComponent?,
-                    new: BaseComponent?
-                ) {}
-
-                override fun onInitProcess(event: DJISDKInitEvent?, progress: Int) {
-                    Log.d(TAG, "SDK init: $event  progress=$progress%")
+                override fun onInitProcess(event: DJISDKInitEvent, totalProgress: Int) {
+                    Log.d(TAG, "SDK init: $event  progress=$totalProgress%")
                 }
 
                 override fun onDatabaseDownloadProgress(current: Long, total: Long) {
@@ -107,6 +98,6 @@ class DJIApplication : Application() {
     override fun onTerminate() {
         super.onTerminate()
         executor.shutdownNow()
-        try { DJISDKManager.getInstance().destroy() } catch (e: Exception) {}
+        try { SDKManager.getInstance().destroy() } catch (e: Exception) {}
     }
 }
