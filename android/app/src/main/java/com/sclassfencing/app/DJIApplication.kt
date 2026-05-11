@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.multidex.MultiDex
+import com.secneo.sdk.Helper
 import dji.v5.common.error.IDJIError
 import dji.v5.common.register.DJISDKInitEvent
 import dji.v5.manager.SDKManager
@@ -25,21 +26,18 @@ class DJIApplication : Application() {
             private set
 
         val isDeviceConnected get() = connectedProductTypeId >= 0
-        val connectedModelName get() = if (connectedProductTypeId >= 0) "OM 7P ($connectedProductTypeId)" else "None"
+        val connectedModelName get() = if (isDeviceConnected) "OM 7P ($connectedProductTypeId)" else "None"
     }
 
     private val executor = Executors.newSingleThreadExecutor()
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        try { MultiDex.install(this) } catch (e: Exception) { Log.e(TAG, "MultiDex: ${e.message}") }
-        try {
-            val cls = Class.forName("com.secneo.sdk.Helper")
-            cls.getMethod("install", Application::class.java).invoke(null, this)
-            Log.i(TAG, "DJI Helper installed")
-        } catch (e: Exception) {
-            Log.w(TAG, "DJI Helper not available: ${e.message}")
-        }
+        // Helper.install() MUST be called first — it patches the app ClassLoader so the
+        // real DJI SDK classes (SDKManager etc.) replace the compileOnly stubs at runtime.
+        // Using reflection here silently fails; direct call is required (matches DJI sample).
+        Helper.install(this)
+        MultiDex.install(this)
     }
 
     override fun onCreate() {

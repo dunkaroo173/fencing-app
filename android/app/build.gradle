@@ -63,12 +63,15 @@ android {
 }
 
 dependencies {
-    // DJI MSDK V5 — available on Maven Central (v4 is not; JCenter shut down 2022)
+    // DJI MSDK V5 — aircraft artifact contains runtime + native libs
+    // provided artifact is compileOnly (stubs only — must NOT be in APK or DEX verifier rejects them)
+    // Helper.install() in Application.attachBaseContext() patches the ClassLoader at runtime
+    // so the real SDK classes replace the stubs.
     implementation('com.dji:dji-sdk-v5-aircraft:5.11.0') {
         exclude module: 'library-anti-distortion'
         exclude module: 'fly-safe-database'
     }
-    implementation('com.dji:dji-sdk-v5-aircraft-provided:5.11.0')
+    compileOnly('com.dji:dji-sdk-v5-aircraft-provided:5.11.0')
 
     // AndroidX core
     implementation 'androidx.core:core-ktx:1.12.0'
