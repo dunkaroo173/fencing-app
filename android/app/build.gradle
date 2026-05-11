@@ -63,13 +63,12 @@ android {
 }
 
 dependencies {
-    // DJI Mobile SDK V5 — Osmo Mobile 7 (handheld stabilizer, not aircraft)
-    implementation('com.dji:dji-sdk-v5-handheld:5.11.0') {
-        exclude module: 'library-anti-distortion'
-        exclude module: 'fly-safe-database'
+    // DJI Mobile SDK v4 — correct SDK for Osmo Mobile 7 (registered as "Mobile SDK" on DJI portal)
+    implementation('com.dji:dji-sdk:4.16.4') {
+        exclude group: 'com.google.android.gms'
+        exclude module: 'libflightrecordingapp'
     }
-    implementation('com.dji:dji-sdk-v5-handheld-provided:5.11.0')
-    // networkImp is optional; add manually if DJI network features are needed
+    compileOnly('com.dji:dji-sdk-provided:4.16.4')
 
     // AndroidX core
     implementation 'androidx.core:core-ktx:1.12.0'

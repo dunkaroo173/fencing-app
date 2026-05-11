@@ -19,7 +19,7 @@ class MainActivity : AppCompatActivity() {
     private val statusPoller = object : Runnable {
         override fun run() {
             updateSDKStatus()
-            if (!DJIApplication.isSDKRegistered && DJIApplication.sdkInitError == null) {
+            if (!DJIApplication.isSDKRegistered && DJIApplication.sdkInitError == null && !DJIApplication.isDeviceConnected) {
                 handler.postDelayed(this, 1500)
             }
         }
@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         val error = DJIApplication.sdkInitError
         when {
             DJIApplication.isSDKRegistered && DJIApplication.isDeviceConnected -> {
-                binding.tvSdkStatus.text = "Connected (product id ${DJIApplication.connectedProductTypeId})"
+                binding.tvSdkStatus.text = "Connected: ${DJIApplication.connectedModelName}"
                 binding.tvSdkStatus.setTextColor(getColor(R.color.green))
                 binding.btnGimbalTracking.isEnabled = true
             }

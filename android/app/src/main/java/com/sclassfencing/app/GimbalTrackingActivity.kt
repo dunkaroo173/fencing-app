@@ -47,7 +47,7 @@ class GimbalTrackingActivity : AppCompatActivity() {
 
     private fun updateConnectionStatus() {
         if (DJIApplication.isDeviceConnected) {
-            binding.tvConnectionStatus.text = "Connected (product id ${DJIApplication.connectedProductTypeId})"
+            binding.tvConnectionStatus.text = "Connected: ${DJIApplication.connectedModelName}"
             binding.layoutControls.visibility = View.VISIBLE
             binding.tvNoDevice.visibility = View.GONE
         } else {

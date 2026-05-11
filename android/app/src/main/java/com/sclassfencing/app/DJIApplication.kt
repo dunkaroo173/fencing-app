@@ -2,14 +2,15 @@ package com.sclassfencing.app
 
 import android.app.Application
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.multidex.MultiDex
-import dji.v5.common.error.IDJIError
-import dji.v5.common.register.DJISDKInitEvent
-import dji.v5.manager.SDKManager
-import dji.v5.manager.interfaces.SDKManagerCallback
+import com.secneo.sdk.Helper
+import dji.common.error.DJIError
+import dji.common.product.Model
+import dji.sdk.base.BaseComponent
+import dji.sdk.base.BaseProduct
+import dji.sdk.sdkmanager.DJISDKInitEvent
+import dji.sdk.sdkmanager.DJISDKManager
 import java.util.concurrent.Executors
 
 class DJIApplication : Application() {
@@ -20,75 +21,74 @@ class DJIApplication : Application() {
         @Volatile var isSDKRegistered = false
             private set
 
-        @Volatile var connectedProductTypeId: Int = -1
+        @Volatile var connectedProduct: BaseProduct? = null
             private set
 
         @Volatile var sdkInitError: String? = null
             private set
 
-        val isDeviceConnected get() = connectedProductTypeId >= 0
+        val isDeviceConnected get() = connectedProduct?.isConnected == true
+        val connectedModelName get() = connectedProduct?.model?.displayName ?: "Unknown"
     }
 
     private val executor = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
+        try { MultiDex.install(this) } catch (e: Exception) { Log.e(TAG, "MultiDex: ${e.message}") }
         try {
-            MultiDex.install(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "MultiDex install failed: ${e.message}")
-        }
-        try {
-            // com.secneo.sdk.Helper is in the runtime handheld artifact, not the provided one.
-            // Must be called via reflection to avoid compile-time unresolved reference.
-            val cls = Class.forName("com.secneo.sdk.Helper")
-            cls.getMethod("install", Application::class.java).invoke(null, this)
+            Helper.install(this)
             Log.i(TAG, "DJI Helper installed")
         } catch (e: Exception) {
-            Log.w(TAG, "DJI Helper not available: ${e.message}")
+            Log.e(TAG, "DJI Helper failed: ${e.message}")
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        // Init DJI SDK on a background thread so a crash here never kills the UI.
         executor.execute { initDJISDK() }
     }
 
     private fun initDJISDK() {
         try {
-            SDKManager.getInstance().init(this, object : SDKManagerCallback {
+            DJISDKManager.getInstance().registerApp(this, object : DJISDKManager.SDKManagerCallback {
 
-                override fun onRegisterSuccess() {
-                    isSDKRegistered = true
-                    sdkInitError = null
-                    Log.i(TAG, "DJI SDK registered OK")
+                override fun onRegister(error: DJIError?) {
+                    if (error == DJIError.REGISTRATION_SUCCESS || error == null) {
+                        isSDKRegistered = true
+                        sdkInitError = null
+                        Log.i(TAG, "DJI SDK v4 registered OK")
+                        DJISDKManager.getInstance().startConnectionToProduct()
+                    } else {
+                        isSDKRegistered = false
+                        sdkInitError = "Registration failed: ${error.description}"
+                        Log.e(TAG, sdkInitError!!)
+                    }
                 }
 
-                override fun onRegisterFailure(error: IDJIError?) {
-                    isSDKRegistered = false
-                    sdkInitError = "Registration failed: $error"
-                    Log.e(TAG, sdkInitError!!)
+                override fun onProductDisconnect() {
+                    connectedProduct = null
+                    Log.i(TAG, "Product disconnected")
                 }
 
-                override fun onProductDisconnect(productTypeId: Int) {
-                    connectedProductTypeId = -1
-                    Log.i(TAG, "Product disconnected (typeId=$productTypeId)")
+                override fun onProductConnect(product: BaseProduct?) {
+                    connectedProduct = product
+                    Log.i(TAG, "Product connected: ${product?.model?.displayName}")
                 }
 
-                override fun onProductConnect(productTypeId: Int) {
-                    connectedProductTypeId = productTypeId
-                    Log.i(TAG, "Product connected (typeId=$productTypeId)")
+                override fun onProductChanged(product: BaseProduct?) {
+                    connectedProduct = product
+                    Log.i(TAG, "Product changed: ${product?.model?.displayName}")
                 }
 
-                override fun onProductChanged(productTypeId: Int) {
-                    connectedProductTypeId = productTypeId
-                    Log.i(TAG, "Product changed (typeId=$productTypeId)")
-                }
+                override fun onComponentChange(
+                    key: BaseProduct.ComponentKey?,
+                    old: BaseComponent?,
+                    new: BaseComponent?
+                ) {}
 
-                override fun onInitProcess(event: DJISDKInitEvent, totalProgress: Int) {
-                    Log.d(TAG, "SDK init: $event  progress=$totalProgress%")
+                override fun onInitProcess(event: DJISDKInitEvent?, progress: Int) {
+                    Log.d(TAG, "SDK init: $event  progress=$progress%")
                 }
 
                 override fun onDatabaseDownloadProgress(current: Long, total: Long) {
@@ -99,7 +99,6 @@ class DJIApplication : Application() {
             sdkInitError = "SDK init exception: ${e.message}"
             Log.e(TAG, sdkInitError!!, e)
         } catch (e: Error) {
-            // Catches UnsatisfiedLinkError, NoClassDefFoundError, etc. from native lib load
             sdkInitError = "SDK native error: ${e.message}"
             Log.e(TAG, sdkInitError!!, e)
         }
@@ -108,6 +107,6 @@ class DJIApplication : Application() {
     override fun onTerminate() {
         super.onTerminate()
         executor.shutdownNow()
-        try { SDKManager.getInstance().destroy() } catch (e: Exception) { /* ignore */ }
+        try { DJISDKManager.getInstance().destroy() } catch (e: Exception) {}
     }
 }
