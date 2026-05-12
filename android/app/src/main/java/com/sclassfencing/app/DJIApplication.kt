@@ -25,18 +25,39 @@ class DJIApplication : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        // MultiDex must be installed before any secondary-DEX classes are touched
+        // Helper patches the ClassLoader so dji.v5.* real classes replace compileOnly stubs.
+        // It must run before MultiDex; multiDexKeepProguard keeps it in the primary DEX.
+        installDJIHelper()
         MultiDex.install(this)
+    }
+
+    private fun installDJIHelper() {
+        try {
+            // Use the base context's classloader — guaranteed to have primary DEX classes.
+            val cl = classLoader ?: Thread.currentThread().contextClassLoader
+            val cls = Class.forName("com.secneo.sdk.Helper", true, cl)
+            cls.getMethod("install", Application::class.java).invoke(null, this)
+            Log.i(TAG, "DJI Helper installed OK")
+        } catch (e: Exception) {
+            sdkInitError = "Helper failed: ${e.javaClass.simpleName}: ${e.message}"
+            Log.e(TAG, sdkInitError!!)
+        } catch (e: Error) {
+            sdkInitError = "Helper error: ${e.javaClass.simpleName}: ${e.message}"
+            Log.e(TAG, sdkInitError!!)
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        executor.execute { initDJISDK() }
+        if (sdkInitError == null) {
+            executor.execute { initDJISDK() }
+        }
     }
 
     private fun initDJISDK() {
         try {
-            val cl = Thread.currentThread().contextClassLoader ?: classLoader
+            // After Helper.install(), the real dji.v5.* classes are in the ClassLoader.
+            val cl = classLoader ?: Thread.currentThread().contextClassLoader
 
             val callbackClass = Class.forName(
                 "dji.v5.manager.interfaces.SDKManagerCallback", true, cl
@@ -68,7 +89,7 @@ class DJIApplication : Application() {
                             Log.i(TAG, "Product changed typeId=$connectedProductTypeId")
                         }
                         "onInitProcess" -> {
-                            Log.d(TAG, "SDK init: ${args?.getOrNull(0)} progress=${args?.getOrNull(1)}%")
+                            Log.d(TAG, "SDK init event: ${args?.getOrNull(0)} ${args?.getOrNull(1)}%")
                         }
                         "onDatabaseDownloadProgress" -> {
                             Log.d(TAG, "DB download ${args?.getOrNull(0)}/${args?.getOrNull(1)}")
@@ -99,7 +120,7 @@ class DJIApplication : Application() {
         super.onTerminate()
         executor.shutdownNow()
         try {
-            val cl = Thread.currentThread().contextClassLoader ?: classLoader
+            val cl = classLoader ?: Thread.currentThread().contextClassLoader
             val cls = Class.forName("dji.v5.manager.SDKManager", true, cl)
             val instance = cls.getMethod("getInstance").invoke(null)
             cls.getMethod("destroy").invoke(instance)

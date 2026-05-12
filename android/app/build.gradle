@@ -14,6 +14,8 @@ android {
         versionCode 1
         versionName "1.0.0"
         multiDexEnabled true
+        // Force DJI Helper into the primary DEX so it's available before MultiDex.install()
+        multiDexKeepProguard file('multidex-keep.pro')
 
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a"
