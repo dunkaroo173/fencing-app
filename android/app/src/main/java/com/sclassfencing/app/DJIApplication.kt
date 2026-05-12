@@ -4,10 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.multidex.MultiDex
-import dji.v5.common.error.IDJIError
-import dji.v5.common.register.DJISDKInitEvent
-import dji.v5.manager.SDKManager
-import dji.v5.manager.interfaces.SDKManagerCallback
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.Proxy
 import java.util.concurrent.Executors
 
 class DJIApplication : Application() {
@@ -16,13 +14,8 @@ class DJIApplication : Application() {
         private const val TAG = "DJIApplication"
 
         @Volatile var isSDKRegistered = false
-            private set
-
         @Volatile var connectedProductTypeId: Int = -1
-            private set
-
         @Volatile var sdkInitError: String? = null
-            private set
 
         val isDeviceConnected get() = connectedProductTypeId >= 0
         val connectedModelName get() = if (isDeviceConnected) "OM 7P ($connectedProductTypeId)" else "None"
@@ -32,8 +25,6 @@ class DJIApplication : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        // Helper must be called before MultiDex — use the thread's context classloader
-        // so reflection finds the class in the runtime artifact, not the stub.
         installDJIHelper()
         MultiDex.install(this)
     }
@@ -62,43 +53,54 @@ class DJIApplication : Application() {
 
     private fun initDJISDK() {
         try {
-            SDKManager.getInstance().init(this, object : SDKManagerCallback {
-
-                override fun onRegisterSuccess() {
-                    isSDKRegistered = true
-                    sdkInitError = null
-                    Log.i(TAG, "DJI SDK registered OK")
+            val cl = Thread.currentThread().contextClassLoader ?: classLoader
+            val callbackClass = Class.forName(
+                "dji.v5.manager.interfaces.SDKManagerCallback", true, cl
+            )
+            val callback = Proxy.newProxyInstance(
+                cl, arrayOf(callbackClass),
+                InvocationHandler { _, method, args ->
+                    when (method.name) {
+                        "onRegisterSuccess" -> {
+                            isSDKRegistered = true
+                            sdkInitError = null
+                            Log.i(TAG, "DJI SDK registered OK")
+                        }
+                        "onRegisterFailure" -> {
+                            isSDKRegistered = false
+                            sdkInitError = "Registration failed: ${args?.getOrNull(0)}"
+                            Log.e(TAG, sdkInitError!!)
+                        }
+                        "onProductConnect" -> {
+                            connectedProductTypeId = (args?.getOrNull(0) as? Int) ?: -1
+                            Log.i(TAG, "Product connected typeId=$connectedProductTypeId")
+                        }
+                        "onProductDisconnect" -> {
+                            connectedProductTypeId = -1
+                            Log.i(TAG, "Product disconnected")
+                        }
+                        "onProductChanged" -> {
+                            connectedProductTypeId = (args?.getOrNull(0) as? Int) ?: -1
+                            Log.i(TAG, "Product changed typeId=$connectedProductTypeId")
+                        }
+                        "onInitProcess" -> {
+                            Log.d(TAG, "SDK init: ${args?.getOrNull(0)} progress=${args?.getOrNull(1)}%")
+                        }
+                        "onDatabaseDownloadProgress" -> {
+                            Log.d(TAG, "DB download ${args?.getOrNull(0)}/${args?.getOrNull(1)}")
+                        }
+                        else -> Log.v(TAG, "SDKCallback.${method.name} called")
+                    }
+                    null
                 }
+            )
 
-                override fun onRegisterFailure(error: IDJIError?) {
-                    isSDKRegistered = false
-                    sdkInitError = "Registration failed: $error"
-                    Log.e(TAG, sdkInitError!!)
-                }
+            val sdkManagerClass = Class.forName("dji.v5.manager.SDKManager", true, cl)
+            val instance = sdkManagerClass.getMethod("getInstance").invoke(null)
+            sdkManagerClass
+                .getMethod("init", Context::class.java, callbackClass)
+                .invoke(instance, this, callback)
 
-                override fun onProductDisconnect(productTypeId: Int) {
-                    connectedProductTypeId = -1
-                    Log.i(TAG, "Product disconnected")
-                }
-
-                override fun onProductConnect(productTypeId: Int) {
-                    connectedProductTypeId = productTypeId
-                    Log.i(TAG, "Product connected typeId=$productTypeId")
-                }
-
-                override fun onProductChanged(productTypeId: Int) {
-                    connectedProductTypeId = productTypeId
-                    Log.i(TAG, "Product changed typeId=$productTypeId")
-                }
-
-                override fun onInitProcess(event: DJISDKInitEvent, totalProgress: Int) {
-                    Log.d(TAG, "SDK init: $event  progress=$totalProgress%")
-                }
-
-                override fun onDatabaseDownloadProgress(current: Long, total: Long) {
-                    Log.d(TAG, "DB download $current/$total")
-                }
-            })
         } catch (e: Exception) {
             sdkInitError = "SDK init exception: ${e.message}"
             Log.e(TAG, sdkInitError!!, e)
@@ -111,6 +113,13 @@ class DJIApplication : Application() {
     override fun onTerminate() {
         super.onTerminate()
         executor.shutdownNow()
-        try { SDKManager.getInstance().destroy() } catch (e: Exception) {}
+        try {
+            val cl = Thread.currentThread().contextClassLoader ?: classLoader
+            val cls = Class.forName("dji.v5.manager.SDKManager", true, cl)
+            val instance = cls.getMethod("getInstance").invoke(null)
+            cls.getMethod("destroy").invoke(instance)
+        } catch (e: Exception) {
+            Log.v(TAG, "SDK destroy skipped: ${e.message}")
+        }
     }
 }
