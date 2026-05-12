@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.multidex.MultiDex
-import com.secneo.sdk.Helper
 import dji.v5.common.error.IDJIError
 import dji.v5.common.register.DJISDKInitEvent
 import dji.v5.manager.SDKManager
@@ -33,16 +32,32 @@ class DJIApplication : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        // Helper.install() MUST be called first — it patches the app ClassLoader so the
-        // real DJI SDK classes (SDKManager etc.) replace the compileOnly stubs at runtime.
-        // Using reflection here silently fails; direct call is required (matches DJI sample).
-        Helper.install(this)
+        // Helper must be called before MultiDex — use the thread's context classloader
+        // so reflection finds the class in the runtime artifact, not the stub.
+        installDJIHelper()
         MultiDex.install(this)
+    }
+
+    private fun installDJIHelper() {
+        try {
+            val cl = Thread.currentThread().contextClassLoader ?: classLoader
+            val cls = Class.forName("com.secneo.sdk.Helper", true, cl)
+            cls.getMethod("install", Application::class.java).invoke(null, this)
+            Log.i(TAG, "DJI Helper installed OK")
+        } catch (e: Exception) {
+            Log.e(TAG, "DJI Helper failed: ${e.javaClass.simpleName}: ${e.message}")
+            sdkInitError = "Helper failed: ${e.message}"
+        } catch (e: Error) {
+            Log.e(TAG, "DJI Helper error: ${e.javaClass.simpleName}: ${e.message}")
+            sdkInitError = "Helper error: ${e.message}"
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        executor.execute { initDJISDK() }
+        if (sdkInitError == null) {
+            executor.execute { initDJISDK() }
+        }
     }
 
     private fun initDJISDK() {
