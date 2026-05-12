@@ -25,35 +25,19 @@ class DJIApplication : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        installDJIHelper()
+        // MultiDex must be installed before any secondary-DEX classes are touched
         MultiDex.install(this)
-    }
-
-    private fun installDJIHelper() {
-        try {
-            val cl = Thread.currentThread().contextClassLoader ?: classLoader
-            val cls = Class.forName("com.secneo.sdk.Helper", true, cl)
-            cls.getMethod("install", Application::class.java).invoke(null, this)
-            Log.i(TAG, "DJI Helper installed OK")
-        } catch (e: Exception) {
-            Log.e(TAG, "DJI Helper failed: ${e.javaClass.simpleName}: ${e.message}")
-            sdkInitError = "Helper failed: ${e.message}"
-        } catch (e: Error) {
-            Log.e(TAG, "DJI Helper error: ${e.javaClass.simpleName}: ${e.message}")
-            sdkInitError = "Helper error: ${e.message}"
-        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        if (sdkInitError == null) {
-            executor.execute { initDJISDK() }
-        }
+        executor.execute { initDJISDK() }
     }
 
     private fun initDJISDK() {
         try {
             val cl = Thread.currentThread().contextClassLoader ?: classLoader
+
             val callbackClass = Class.forName(
                 "dji.v5.manager.interfaces.SDKManagerCallback", true, cl
             )
@@ -100,6 +84,7 @@ class DJIApplication : Application() {
             sdkManagerClass
                 .getMethod("init", Context::class.java, callbackClass)
                 .invoke(instance, this, callback)
+            Log.i(TAG, "SDKManager.init() called")
 
         } catch (e: Exception) {
             sdkInitError = "SDK init exception: ${e.message}"
