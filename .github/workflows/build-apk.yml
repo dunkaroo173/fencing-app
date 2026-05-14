@@ -22,22 +22,33 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install Node dependencies
         run: npm ci
 
-      - name: Sync Capacitor web assets
+      - name: Sync Capacitor web assets into Android project
         run: npx cap sync android
+
+      - name: Write local.properties (SDK path)
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
+      - name: Install Android platform 35 + build-tools
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools" 2>/dev/null || true
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Build debug APK
         working-directory: android
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ufl-fencing-debug
