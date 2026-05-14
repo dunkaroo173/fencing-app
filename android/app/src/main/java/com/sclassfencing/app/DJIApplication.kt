@@ -25,33 +25,12 @@ class DJIApplication : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        // Helper patches the ClassLoader so dji.v5.* real classes replace compileOnly stubs.
-        // It must run before MultiDex; multiDexKeepProguard keeps it in the primary DEX.
-        installDJIHelper()
         MultiDex.install(this)
-    }
-
-    private fun installDJIHelper() {
-        try {
-            // Use the base context's classloader — guaranteed to have primary DEX classes.
-            val cl = classLoader ?: Thread.currentThread().contextClassLoader
-            val cls = Class.forName("com.secneo.sdk.Helper", true, cl)
-            cls.getMethod("install", Application::class.java).invoke(null, this)
-            Log.i(TAG, "DJI Helper installed OK")
-        } catch (e: Exception) {
-            sdkInitError = "Helper failed: ${e.javaClass.simpleName}: ${e.message}"
-            Log.e(TAG, sdkInitError!!)
-        } catch (e: Error) {
-            sdkInitError = "Helper error: ${e.javaClass.simpleName}: ${e.message}"
-            Log.e(TAG, sdkInitError!!)
-        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        if (sdkInitError == null) {
-            executor.execute { initDJISDK() }
-        }
+        executor.execute { initDJISDK() }
     }
 
     private fun initDJISDK() {
