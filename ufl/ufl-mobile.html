@@ -64,7 +64,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .hud-av{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .hud-info{flex:1;min-width:0;display:flex;flex-direction:column}
 .hud-name{font-family:var(--head);font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hud-hp{height:5px;background:var(--s2);border-radius:2px;margin-top:3px;overflow:hidden}
+.hud-hp{height:5px;background:var(--s2);border-radius:2px;margin-top:3px;overflow:hidden;width:100%}
 .hud-hp-fill{height:100%;border-radius:2px;transition:width .35s}
 .hud-pts{font-family:var(--head);font-weight:800;font-size:22px;min-width:26px;text-align:center;flex-shrink:0}
 .timer-wrap{display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:0 6px}
@@ -445,6 +445,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
           <button class="exp-btn" id="exp-json">⬇ Export JSON</button>
           <button class="exp-btn" id="exp-csv">⬇ Export CSV</button>
           <button class="exp-btn" id="exp-txt">⬇ Export TXT</button>
+          <button class="exp-btn" id="exp-video" style="display:none">⬇ Export Video</button>
         </div>
       </div>
     </div>
@@ -658,6 +659,11 @@ function endPeriod() {
 
 function finishMatch() {
   stopTimer();
+  if (_camState === 'recording') {
+    _autoStop = true;
+    _mediaRec.stop();
+    _camStream.getTracks().forEach(t => t.stop());
+  }
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
@@ -685,6 +691,7 @@ function runCountdown(cb) {
 function clickStart() {
   const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
+  _recBlob = null;
   M = newMatchState({ nameL, nameR, ...CFG });
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
@@ -1203,6 +1210,8 @@ let _mediaRec     = null;
 let _recChunks    = [];
 let _camState     = 'idle'; // idle | preview | recording
 let _mimeType     = '';
+let _recBlob      = null;   // retained blob for post-match video export
+let _autoStop     = false;  // true when finishMatch() triggers stop
 let _recCanvas    = null;   // offscreen canvas for overlay compositing
 let _recCtx       = null;
 let _rafId        = null;   // requestAnimationFrame handle
@@ -1448,21 +1457,25 @@ async function toggleCamera() {
   // ── RECORDING → STOP + SAVE ─────────────────────────────────────────────────
   if (_camState === 'recording') {
     _mediaRec.onstop = () => {
-      if (_recChunks.length === 0) { showCamError('No data recorded'); return; }
+      if (_recChunks.length === 0) { showCamError('No data recorded'); resetCamUI(); return; }
       const mime = _mimeType || 'video/webm';
-      const blob = new Blob(_recChunks, { type: mime });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `match-${Date.now()}.${camExt()}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      _recBlob = new Blob(_recChunks, { type: mime });
+      if (!_autoStop) {
+        // Manual mid-match stop: download immediately (existing behaviour)
+        const url = URL.createObjectURL(_recBlob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = `match-${Date.now()}.${camExt()}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+      _autoStop = false;
+      resetCamUI();
     };
     _mediaRec.stop();
     _camStream.getTracks().forEach(t => t.stop());
-    resetCamUI();
   }
 }
 
@@ -1505,13 +1518,24 @@ function exportTXT() {
   a.click();
 }
 
+function exportVideo() {
+  if (!_recBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(_recBlob);
+  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.${camExt()}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
 document.getElementById('exp-csv').addEventListener('touchend',  e=>{ e.preventDefault(); exportCSV();  },{passive:false});
 document.getElementById('exp-txt').addEventListener('touchend',  e=>{ e.preventDefault(); exportTXT();  },{passive:false});
+document.getElementById('exp-video').addEventListener('touchend',e=>{ e.preventDefault(); exportVideo();},{passive:false});
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
 function openDrawer() {
   buildReport();
+  document.getElementById('exp-video').style.display = _recBlob ? 'inline-block' : 'none';
   document.getElementById('drawer').classList.add('on');
   document.getElementById('drawer-backdrop').classList.add('on');
 }
