@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - uses: actions/setup-node@v4
         with:
@@ -24,6 +24,9 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Pin AGP version in Capacitor Android module
+        run: sed -i 's/com\.android\.tools\.build:gradle:8\.13\.0/com.android.tools.build:gradle:8.5.2/g' node_modules/@capacitor/android/capacitor/build.gradle
 
       - name: Sync Capacitor web assets into Android project
         run: npx cap sync android
