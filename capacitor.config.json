@@ -1,0 +1,13 @@
+{
+  "appId": "io.github.dunkaroo173.uflfencing",
+  "appName": "UFL Fencing",
+  "webDir": "ufl-android",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}
