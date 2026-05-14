@@ -109,10 +109,13 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .conf-label{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:1px;text-align:center}
 
 /* ── SVG RADIAL MENU ── */
-#radial-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:25;background:rgba(0,0,0,0.84);transition:opacity .2s;touch-action:none}
+#radial-overlay{position:absolute;inset:0;display:none;z-index:25;background:rgba(0,0,0,0.84);transition:opacity .2s;touch-action:none}
+#r-panel{position:absolute;bottom:8px;display:flex;flex-direction:column;align-items:center}
+#r-panel.side-L{left:8px}
+#r-panel.side-R{right:8px}
 #r-svgwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none}
-#r-svg{display:block;touch-action:none;width:min(320px,92vmin);height:min(320px,92vmin)}
-.radial-cancel-btn{margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.32);padding:7px 24px;border-radius:2px;font-size:9px;font-family:var(--mono);letter-spacing:2.5px}
+#r-svg{display:block;touch-action:none;width:min(300px,88vmin);height:min(300px,88vmin)}
+.radial-cancel-btn{margin-top:6px;background:transparent;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.32);padding:7px 24px;border-radius:2px;font-size:9px;font-family:var(--mono);letter-spacing:2.5px}
 @keyframes r-sector-in{from{opacity:0;transform:scale(.1)}to{opacity:1;transform:scale(1)}}
 @keyframes r-sector-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.1)}}
 @keyframes r-pulse-ring{0%{r:138;opacity:.85}100%{r:168;opacity:0}}
@@ -121,16 +124,17 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .r-pulse-anim{animation:r-pulse-ring .65s ease-out forwards}
 
 /* ── SCREEN 2: RESULT ── */
-#s-result{flex-direction:column;background:var(--bg);justify-content:space-between;padding:16px}
+#s-result{flex-direction:column;background:var(--bg);justify-content:space-between;padding:10px 16px}
 .result-topbar{display:flex;justify-content:space-between;align-items:center}
-.result-main{display:flex;justify-content:center;align-items:center;gap:30px;flex:1}
-.res-fencer{display:flex;flex-direction:column;align-items:center;gap:8px}
-.res-av{width:60px;height:60px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:26px}
-.res-name{font-family:var(--head);font-size:15px;font-weight:600;color:#fff;text-align:center}
+.result-main{display:flex;justify-content:center;align-items:center;gap:20px;flex:1;min-height:0}
+.res-fencer{display:flex;flex-direction:column;align-items:center;gap:6px}
+.res-av{width:48px;height:48px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px}
+.res-name{font-family:var(--head);font-size:14px;font-weight:600;color:#fff;text-align:center}
 .res-scorebox{text-align:center}
-.res-score-lbl{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px}
-.res-score-num{font-family:var(--head);font-weight:800;font-size:44px;color:#fff;letter-spacing:8px;line-height:1}
-.result-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.res-score-lbl{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px}
+.res-score-num{font-family:var(--head);font-weight:800;font-size:38px;color:#fff;letter-spacing:8px;line-height:1}
+.result-btns{display:flex;gap:8px;justify-content:center;flex-wrap:nowrap}
+.result-btns .rnd{width:auto;flex:1;min-width:0;padding:12px 8px;font-size:13px;letter-spacing:.5px}
 
 /* ── SCREEN 3: EVENTS ── */
 #s-events{background:rgba(0,0,0,0.9);flex-direction:row}
@@ -331,8 +335,9 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     </div>
   </div>
 
-  <!-- SVG Radial menu overlay (centered, full-screen) -->
+  <!-- SVG Radial menu overlay -->
   <div id="radial-overlay">
+    <div id="r-panel">
     <div id="r-svgwrap">
       <svg id="r-svg" viewBox="0 0 320 320">
         <defs>
@@ -356,6 +361,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
       </svg>
     </div>
     <button id="radial-cancel" class="radial-cancel-btn">✕  CANCEL</button>
+    </div><!-- /r-panel -->
   </div>
 </div>
 
@@ -1007,7 +1013,8 @@ function openPie(side){
   stopTimer();
   _radSide=side; _radPhase='main'; _radStack=[]; _radHov=null; _radEls=[]; _radMenu=null;
   const ov=document.getElementById('radial-overlay');
-  ov.style.display='flex'; ov.style.opacity='0';
+  document.getElementById('r-panel').className=side==='L'?'side-L':'side-R';
+  ov.style.display='block'; ov.style.opacity='0';
   requestAnimationFrame(()=>requestAnimationFrame(()=>ov.style.opacity='1'));
   _rTrack1.setAttribute('opacity','0'); _rTrack2.setAttribute('opacity','0');
   _rCenterDisc.setAttribute('opacity','0');
