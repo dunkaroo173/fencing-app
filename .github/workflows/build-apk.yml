@@ -17,6 +17,9 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Copy web app into Android assets
         run: |
           mkdir -p android/app/src/main/assets
@@ -28,12 +31,14 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
-      - name: Install Android platform 35 + build-tools
+      - name: Diagnose AGP 8.13.0 availability
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platform-tools" 2>/dev/null || true
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/8.13.0/gradle-8.13.0.pom")
+          echo "AGP 8.13.0 POM HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Google Maven returned HTTP $STATUS for AGP 8.13.0 — build may fail"
+          fi
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
