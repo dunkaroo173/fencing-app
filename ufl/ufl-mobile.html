@@ -1123,7 +1123,7 @@ function hideConfirm() {
   // Plain confirm (cards / ref actions)
   document.getElementById(`conf-${s}-yes`).addEventListener('touchend', e => {
     e.preventDefault();
-    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId, _pendingAction.actionId > 10 ? false : false);
+    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId);
     hideConfirm();
   }, {passive:false});
   // Cancel
