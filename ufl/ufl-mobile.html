@@ -770,6 +770,7 @@ document.getElementById('res-end').addEventListener('touchend', e => {
 document.getElementById('ev-back').addEventListener('touchend', e => {
   e.preventDefault();
   showScreen(M && M.finished ? 's-result' : 's-match');
+  if (M && !M.finished) startTimer();
 }, {passive:false});
 
 // ── SVG Radial menu ───────────────────────────────────────────────────────────
