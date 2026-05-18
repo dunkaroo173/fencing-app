@@ -662,8 +662,8 @@ function finishMatch() {
   stopTimer();
   if (_camState === 'recording') {
     _autoStop = true;
-    _mediaRec.stop();
-    _camStream.getTracks().forEach(t => t.stop());
+    if (_mediaRec) _mediaRec.stop();
+    if (_camStream) _camStream.getTracks().forEach(t => t.stop());
   }
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
