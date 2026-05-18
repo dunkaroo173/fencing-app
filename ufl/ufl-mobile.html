@@ -393,6 +393,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     <button class="rnd rnd-grey" id="res-simul"  style="min-width:120px">⚖️ SIMULTANEOUS</button>
     <button class="rnd rnd-grey" id="res-events" style="min-width:120px">📋 EVENTS</button>
     <button class="rnd rnd-red"  id="res-end"    style="min-width:120px">⏹ END MATCH</button>
+    <button class="rnd rnd-blue" id="res-new"    style="min-width:120px;display:none">🆕 NEW MATCH</button>
   </div>
 </div>
 
@@ -724,6 +725,8 @@ function showResultScreen(title) {
     `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
     `Cards:${M.cardsR.length}`;
   document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
+  document.getElementById('res-end').style.display    = M.finished ? 'none' : 'block';
+  document.getElementById('res-new').style.display    = M.finished ? 'block' : 'none';
   showScreen('s-result');
 }
 
@@ -765,6 +768,15 @@ document.getElementById('res-end').addEventListener('touchend', e => {
   e.preventDefault();
   stopTimer();
   finishMatch();
+}, {passive:false});
+
+document.getElementById('res-new').addEventListener('touchend', e => {
+  e.preventDefault();
+  resetCamUI();
+  _recBlob = null;
+  M = null;
+  document.getElementById('fab-btn').style.display = 'none';
+  showScreen('s-setup');
 }, {passive:false});
 
 document.getElementById('ev-back').addEventListener('touchend', e => {
