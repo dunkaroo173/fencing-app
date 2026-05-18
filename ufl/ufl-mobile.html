@@ -1069,7 +1069,10 @@ function closePie(side){
   wrap.addEventListener('pointerdown',_radPtrDown,{passive:false});
   wrap.addEventListener('pointermove',_radPtrMove,{passive:false});
   wrap.addEventListener('pointerup',  _radPtrUp,  {passive:false});
-  wrap.addEventListener('pointercancel',()=>{if(_radEls.length)_radSetHov(null);},{passive:false});
+  wrap.addEventListener('pointercancel',e=>{
+    if(_radEls.length)_radSetHov(null);
+    try{wrap.releasePointerCapture(e.pointerId);}catch{}
+  },{passive:false});
   document.getElementById('radial-cancel').addEventListener('touchend',e=>{
     e.preventDefault(); if(_radSide!==null)closePie(_radSide);
   },{passive:false});
