@@ -1579,7 +1579,7 @@ function buildReport() {
     `<div class="rpt-row"><span class="rpt-k">${M.nameL}</span><span class="rpt-v">${M.scoreL} pts, ${hitsL} hits</span></div>` +
     `<div class="rpt-row"><span class="rpt-k">${M.nameR}</span><span class="rpt-v">${M.scoreR} pts, ${hitsR} hits</span></div>` +
     `<div class="rpt-row"><span class="rpt-k">Total events</span><span class="rpt-v">${M.events.length}</span></div>` +
-    `<div class="rpt-row"><span class="rpt-k">Duration</span><span class="rpt-v">${fmtTime(M.periodDuration - M.timerSec)}</span></div>`;
+    `<div class="rpt-row"><span class="rpt-k">Duration</span><span class="rpt-v">${fmtTime((M.period - 1) * M.periodDuration + (M.periodDuration - M.timerSec))}</span></div>`;
 
   // AI panel: confidence stubs
   const aiList = document.getElementById('ai-list');
