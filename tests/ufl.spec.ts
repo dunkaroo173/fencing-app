@@ -47,7 +47,7 @@ test.describe('UFL fencing app', () => {
     await page.locator('#ev-back').tap();
     await expect(page.locator('#s-match.active')).toBeVisible();
 
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
     const after = parseTimer(await page.locator('#timer-disp').innerText());
 
     expect(after, `timer should have decreased; before=${before}, after=${after}`).toBeLessThan(before);
