@@ -26,7 +26,7 @@
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--body)}
 button{cursor:pointer;border:none;background:none;color:inherit;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 #portrait-overlay{display:none;position:absolute;inset:0;background:#000;z-index:9999;align-items:center;justify-content:center;font-size:16px;letter-spacing:2px;color:#fff;font-family:monospace;pointer-events:none}
-#portrait-overlay.on{display:flex;pointer-events:none}
+#portrait-overlay.on{display:flex;pointer-events:auto}
 .app-root{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
 .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden}
 .screen.active{display:flex}
@@ -142,7 +142,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .ev-side-name{font-family:var(--head);font-size:12px;font-weight:600;text-align:center;margin-top:8px}
 .ev-side-tag{margin-top:auto;width:100%;padding:10px 0;text-align:center;font-family:var(--head);font-weight:700;font-size:13px;color:#fff;border-radius:4px}
 .ev-main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.ev-divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.15)}
+.ev-divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.15);pointer-events:none}
 .ev-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 0}
 .ev-item{padding:8px 10px;display:flex;align-items:stretch}
 .ev-bubble{border-radius:10px;padding:7px 12px;display:flex;gap:6px;align-items:center}
@@ -393,6 +393,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     <button class="rnd rnd-grey" id="res-simul"  style="min-width:120px">⚖️ SIMULTANEOUS</button>
     <button class="rnd rnd-grey" id="res-events" style="min-width:120px">📋 EVENTS</button>
     <button class="rnd rnd-red"  id="res-end"    style="min-width:120px">⏹ END MATCH</button>
+    <button class="rnd rnd-blue" id="res-new"    style="min-width:120px;display:none">🆕 NEW MATCH</button>
   </div>
 </div>
 
@@ -661,8 +662,8 @@ function finishMatch() {
   stopTimer();
   if (_camState === 'recording') {
     _autoStop = true;
-    _mediaRec.stop();
-    _camStream.getTracks().forEach(t => t.stop());
+    if (_mediaRec) _mediaRec.stop();
+    if (_camStream) _camStream.getTracks().forEach(t => t.stop());
   }
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
@@ -724,6 +725,8 @@ function showResultScreen(title) {
     `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
     `Cards:${M.cardsR.length}`;
   document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
+  document.getElementById('res-end').style.display    = M.finished ? 'none' : 'block';
+  document.getElementById('res-new').style.display    = M.finished ? 'block' : 'none';
   showScreen('s-result');
 }
 
@@ -767,9 +770,19 @@ document.getElementById('res-end').addEventListener('touchend', e => {
   finishMatch();
 }, {passive:false});
 
+document.getElementById('res-new').addEventListener('touchend', e => {
+  e.preventDefault();
+  resetCamUI();
+  _recBlob = null;
+  M = null;
+  document.getElementById('fab-btn').style.display = 'none';
+  showScreen('s-setup');
+}, {passive:false});
+
 document.getElementById('ev-back').addEventListener('touchend', e => {
   e.preventDefault();
   showScreen(M && M.finished ? 's-result' : 's-match');
+  if (M && !M.finished) startTimer();
 }, {passive:false});
 
 // ── SVG Radial menu ───────────────────────────────────────────────────────────
@@ -1056,7 +1069,10 @@ function closePie(side){
   wrap.addEventListener('pointerdown',_radPtrDown,{passive:false});
   wrap.addEventListener('pointermove',_radPtrMove,{passive:false});
   wrap.addEventListener('pointerup',  _radPtrUp,  {passive:false});
-  wrap.addEventListener('pointercancel',()=>{if(_radEls.length)_radSetHov(null);},{passive:false});
+  wrap.addEventListener('pointercancel',e=>{
+    if(_radEls.length)_radSetHov(null);
+    try{wrap.releasePointerCapture(e.pointerId);}catch{}
+  },{passive:false});
   document.getElementById('radial-cancel').addEventListener('touchend',e=>{
     e.preventDefault(); if(_radSide!==null)closePie(_radSide);
   },{passive:false});
@@ -1110,7 +1126,7 @@ function hideConfirm() {
   // Plain confirm (cards / ref actions)
   document.getElementById(`conf-${s}-yes`).addEventListener('touchend', e => {
     e.preventDefault();
-    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId, _pendingAction.actionId > 10 ? false : false);
+    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId);
     hideConfirm();
   }, {passive:false});
   // Cancel
@@ -1484,12 +1500,20 @@ document.getElementById('cam-btn').addEventListener('touchend', e => {
 }, {passive:false});
 
 // ── Exports ───────────────────────────────────────────────────────────────────
+function _downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 function exportJSON() {
   const blob = new Blob([JSON.stringify(M, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.json`;
-  a.click();
+  _downloadBlob(blob, `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.json`);
 }
 
 function exportCSV() {
@@ -1498,10 +1522,7 @@ function exportCSV() {
     rows.push([ev.ts,ev.side,ev.actionId,`"${ev.label}"`,ev.isHit,ev.period].join(','));
   });
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.csv`;
-  a.click();
+  _downloadBlob(blob, `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.csv`);
 }
 
 function exportTXT() {
@@ -1512,19 +1533,12 @@ function exportTXT() {
     txt += `[${fmtTime(ev.ts)}] P${ev.period}  ${ev.emoji} ${ev.side === 'L' ? M.nameL : ev.side === 'R' ? M.nameR : 'REF'}: ${ev.label}\n`;
   });
   const blob = new Blob([txt], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.txt`;
-  a.click();
+  _downloadBlob(blob, `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.txt`);
 }
 
 function exportVideo() {
   if (!_recBlob) return;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(_recBlob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.${camExt()}`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  _downloadBlob(_recBlob, `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.${camExt()}`);
 }
 
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
@@ -1565,7 +1579,7 @@ function buildReport() {
     `<div class="rpt-row"><span class="rpt-k">${M.nameL}</span><span class="rpt-v">${M.scoreL} pts, ${hitsL} hits</span></div>` +
     `<div class="rpt-row"><span class="rpt-k">${M.nameR}</span><span class="rpt-v">${M.scoreR} pts, ${hitsR} hits</span></div>` +
     `<div class="rpt-row"><span class="rpt-k">Total events</span><span class="rpt-v">${M.events.length}</span></div>` +
-    `<div class="rpt-row"><span class="rpt-k">Duration</span><span class="rpt-v">${fmtTime(M.periodDuration - M.timerSec)}</span></div>`;
+    `<div class="rpt-row"><span class="rpt-k">Duration</span><span class="rpt-v">${fmtTime((M.period - 1) * M.periodDuration + (M.periodDuration - M.timerSec))}</span></div>`;
 
   // AI panel: confidence stubs
   const aiList = document.getElementById('ai-list');
