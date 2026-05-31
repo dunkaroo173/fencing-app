@@ -153,6 +153,35 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .ev-hint{font-family:var(--body);font-size:12px;color:#fff;font-weight:500}
 .ev-btm{padding:12px;display:flex;justify-content:center;flex-shrink:0}
 
+/* ── Resume banner (setup) ── */
+.resume-banner{position:absolute;top:0;left:0;right:0;z-index:50;display:none;align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(90deg,#0a39d4,#0a2a8a);box-shadow:0 2px 12px rgba(0,0,0,0.5)}
+.resume-banner.on{display:flex}
+.resume-banner .rb-text{flex:1;font-family:var(--head);font-weight:700;font-size:13px;color:#fff;letter-spacing:.5px}
+.resume-banner button{padding:8px 14px;border-radius:20px;font-family:var(--body);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.resume-banner .rb-yes{background:#fff;color:#0a2a8a}
+.resume-banner .rb-no{background:rgba(255,255,255,0.15);color:#fff}
+
+/* ── SCREEN 5: MATCH LIBRARY ── */
+#s-library{background:linear-gradient(135deg,#07080c 60%,#0a0e18)}
+.lib-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.lib-title{flex:1;font-family:var(--head);font-weight:800;font-size:16px;letter-spacing:2px;color:#fff;text-align:center}
+.lib-back,.lib-clear{padding:8px 12px;border-radius:18px;font-family:var(--body);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.lib-back{background:#444;color:#fff}
+.lib-clear{background:#a82e15;color:#fff}
+.lib-usage{padding:8px 16px;font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
+.lib-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 12px 20px}
+.lib-empty{padding:40px 0;text-align:center;color:var(--muted);font-family:var(--head);letter-spacing:1px}
+.lib-row{display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:8px;background:var(--s2);border:1px solid var(--border);border-radius:10px}
+.lib-row-main{flex:1;min-width:0}
+.lib-row-names{font-family:var(--head);font-weight:700;font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-vs{color:var(--muted);font-weight:600;font-size:12px}
+.lib-row-meta{margin-top:3px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.lib-status.live{color:var(--green)}
+.lib-status.done{color:var(--muted)}
+.lib-load{padding:10px 14px;border-radius:18px;background:#0a39d4;color:#fff;font-family:var(--body);font-weight:700;font-size:12px;letter-spacing:1px;flex-shrink:0}
+.lib-del{padding:10px 12px;border-radius:18px;background:rgba(168,46,21,0.25);font-size:16px;flex-shrink:0}
+.lib-row button:active{transform:scale(0.94)}
+
 /* ── SCREEN 4: COUNTDOWN ── */
 #s-countdown{align-items:center;justify-content:center;background:rgba(0,0,0,0.88)}
 .cd-num{font-family:var(--mono);font-size:96px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,0.6);line-height:1}
@@ -211,6 +240,11 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 
 <!-- ── SCREEN 0: SETUP ── -->
 <div id="s-setup" class="screen active">
+  <div class="resume-banner" id="resume-banner">
+    <div class="rb-text" id="resume-text">Resume match?</div>
+    <button class="rb-yes" id="resume-yes">Resume</button>
+    <button class="rb-no" id="resume-no">Dismiss</button>
+  </div>
   <div class="setup-col left">
     <div class="setup-avatar" id="av-l">🤺</div>
     <input class="setup-name-input" id="name-l" type="text" maxlength="18" placeholder="LEFT FENCER" autocomplete="off" spellcheck="false">
@@ -253,6 +287,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     </div>
     <div class="setup-btns">
       <button class="rnd rnd-start" id="btn-start">▶ START MATCH</button>
+      <button class="rnd rnd-end" id="btn-library">📚 LIBRARY</button>
       <button class="rnd rnd-end" id="btn-load">⬆ LOAD JSON</button>
       <input type="file" id="file-input" accept=".json" style="display:none">
     </div>
@@ -424,6 +459,17 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
   <div class="cd-sub">GET READY</div>
 </div>
 
+<!-- ── SCREEN 5: MATCH LIBRARY ── -->
+<div id="s-library" class="screen">
+  <div class="lib-head">
+    <button class="lib-back" id="lib-back">← BACK</button>
+    <div class="lib-title">MATCH LIBRARY</div>
+    <button class="lib-clear" id="lib-clear">CLEAR ALL</button>
+  </div>
+  <div class="lib-usage" id="lib-usage"></div>
+  <div class="lib-list" id="lib-list"></div>
+</div>
+
 <!-- ── DRAWER ── -->
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <div class="drawer" id="drawer">
@@ -572,8 +618,125 @@ const PIE_SECTORS = {
 let M = null;
 let PS = {left:null, right:null}; // pending pie selection {menuType, side}
 
+// ── Persistence (localStorage) ─────────────────────────────────────────────
+// Per-match snapshots live under `ufl:match:{id}`; a lightweight `ufl:index`
+// array drives the library list and resume check without parsing every match.
+// Blobs/video are NEVER stored here — only the serialisable `M` snapshot.
+const LS_INDEX  = 'ufl:index';
+const LS_CLIENT = 'ufl:clientId';
+const LS_MATCH  = id => `ufl:match:${id}`;
+const LS_CAP    = 50;  // keep last N matches, FIFO prune
+// Piste zone for each event, predicted later by an AI pass over the video;
+// `null` until then. Identity is the UUID — zones never derive from it.
+const PISTE_ZONES = ['L-END', 'L-MID', 'R-MID', 'R-END'];
+
+// Globally-unique id (cloud-safe). Falls back for browsers lacking randomUUID.
+function genId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0'));
+  return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10,16).join('')}`;
+}
+
+// One stable id per install — stamps every match so cloud sync (UX-4) can
+// namespace/dedupe by device without a later migration.
+function getClientId() {
+  let id = null;
+  try { id = localStorage.getItem(LS_CLIENT); } catch (_) { return null; }
+  if (!id) {
+    id = genId();
+    try { localStorage.setItem(LS_CLIENT, id); } catch (_) { /* storage disabled */ }
+  }
+  return id;
+}
+
+function readIndex() {
+  try { return JSON.parse(localStorage.getItem(LS_INDEX)) || []; }
+  catch (_) { return []; }
+}
+
+function writeIndex(idx) {
+  try { localStorage.setItem(LS_INDEX, JSON.stringify(idx)); }
+  catch (err) { console.warn('UFL: could not write match index', err); }
+}
+
+function indexEntry(m) {
+  return { id: m.matchId, nameL: m.nameL, nameR: m.nameR,
+           scoreL: m.scoreL, scoreR: m.scoreR, weapon: m.weapon,
+           finished: m.finished, createdAt: m.createdAt, savedAt: m.savedAt };
+}
+
+// Evict one match (prefer an older finished one) to reclaim space; returns
+// false when there is nothing else to drop. Never evicts the live match.
+function evictOldest(excludeId) {
+  const idx = readIndex().filter(e => e.id !== excludeId);
+  const victim = [...idx].reverse().find(e => e.finished) || idx[idx.length - 1];
+  if (!victim) return false;
+  try { localStorage.removeItem(LS_MATCH(victim.id)); } catch (_) {}
+  writeIndex(readIndex().filter(e => e.id !== victim.id));
+  return true;
+}
+
+function saveMatch() {
+  if (!M || !M.matchId) return;
+  M.savedAt = Date.now();
+  const payload = JSON.stringify(M);
+  try {
+    localStorage.setItem(LS_MATCH(M.matchId), payload);
+  } catch (err) {
+    // Quota hit — drop the oldest match and retry once; never break labelling.
+    if (evictOldest(M.matchId)) {
+      try { localStorage.setItem(LS_MATCH(M.matchId), payload); }
+      catch (e2) { console.warn('UFL: match autosave failed (storage full)', e2); return; }
+    } else { console.warn('UFL: match autosave failed (storage full)', err); return; }
+  }
+  let idx = readIndex().filter(e => e.id !== M.matchId);
+  idx.unshift(indexEntry(M));
+  while (idx.length > LS_CAP) {
+    const drop = idx.pop();
+    try { localStorage.removeItem(LS_MATCH(drop.id)); } catch (_) {}
+  }
+  writeIndex(idx);
+}
+
+let _saveTimer = null;
+function scheduleSave() {
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => { _saveTimer = null; saveMatch(); }, 250);
+}
+
+function deleteMatch(id) {
+  try { localStorage.removeItem(LS_MATCH(id)); } catch (_) {}
+  writeIndex(readIndex().filter(e => e.id !== id));
+}
+
+function clearAllMatches() {
+  readIndex().forEach(e => { try { localStorage.removeItem(LS_MATCH(e.id)); } catch (_) {} });
+  writeIndex([]);
+}
+
+function loadMatch(id) {
+  try { return JSON.parse(localStorage.getItem(LS_MATCH(id))) || null; }
+  catch (_) { return null; }
+}
+
+// Approx bytes used by stored match snapshots (for the library usage readout).
+function storageBytes() {
+  return readIndex().reduce((n, e) => {
+    const v = localStorage.getItem(LS_MATCH(e.id));
+    return n + (v ? v.length : 0);
+  }, 0);
+}
+
 function newMatchState(cfg) {
+  const now = Date.now();
   return {
+    matchId: genId(),
+    clientId: getClientId(),
+    createdAt: now,
+    savedAt: now,
     nameL: cfg.nameL || 'LEFT',
     nameR: cfg.nameR || 'RIGHT',
     weapon: cfg.weapon || 'foil',
@@ -652,6 +815,7 @@ function endPeriod() {
   if (M.period < M.totalPeriods) {
     M.period++;
     M.timerSec = M.periodDuration;
+    scheduleSave();
     showResultScreen('END OF PERIOD ' + (M.period - 1));
   } else {
     finishMatch();
@@ -666,6 +830,7 @@ function finishMatch() {
     if (_camStream) _camStream.getTracks().forEach(t => t.stop());
   }
   M.finished = true;
+  saveMatch();
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
   document.getElementById('res-resume').style.display = 'none';
@@ -694,6 +859,7 @@ function clickStart() {
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
   _recBlob = null;
   M = newMatchState({ nameL, nameR, ...CFG });
+  saveMatch();  // persist immediately so an interrupted match is resumable
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
   document.getElementById('hud-name-r').textContent = nameR;
@@ -733,6 +899,7 @@ function showResultScreen(title) {
 document.getElementById('pause-btn').addEventListener('touchend', e => {
   e.preventDefault();
   stopTimer();
+  scheduleSave();
   showResultScreen('MATCH PAUSED');
 }, {passive:false});
 
@@ -752,7 +919,8 @@ document.getElementById('res-simul').addEventListener('touchend', e => {
   e.preventDefault();
   if (M && !M.finished) {
     const ts = M.periodDuration - M.timerSec;
-    M.events.push({ ts, side:'C', actionId:124, label:'Simultaneous', emoji:'⚖️', isHit:false, period:M.period });
+    M.events.push({ ts, side:'C', actionId:124, label:'Simultaneous', emoji:'⚖️', isHit:false, piste:null, period:M.period });
+    scheduleSave();
   }
   showScreen('s-match');
   if (M && !M.finished) startTimer();
@@ -776,6 +944,7 @@ document.getElementById('res-new').addEventListener('touchend', e => {
   _recBlob = null;
   M = null;
   document.getElementById('fab-btn').style.display = 'none';
+  checkResume();
   showScreen('s-setup');
 }, {passive:false});
 
@@ -1167,8 +1336,10 @@ function doConfirm(side, actionId, isHit) {
                       label: action ? action.label : '?',
                       emoji: action ? action.emoji  : '?',
                       isHit: scored,
+                      piste: null,  // AI-predicted later; one of PISTE_ZONES
                       period: M.period };
   M.events.push(ev);
+  scheduleSave();
   // Stamp for overlay pill (shown on recording canvas for 3 s)
   _lastAction   = { emoji: ev.emoji, label: ev.label, side: ev.side, isHit: scored };
   _lastActionAt = performance.now();
@@ -1740,6 +1911,11 @@ document.getElementById('file-input').addEventListener('change', evt => {
   reader.onload = ev => {
     try {
       M = JSON.parse(ev.target.result);
+      // Backfill identity for older exports so the match joins the library.
+      if (!M.matchId)   M.matchId   = genId();
+      if (!M.clientId)  M.clientId  = getClientId();
+      if (!M.createdAt) M.createdAt = Date.now();
+      saveMatch();
       refreshHUD();
       document.getElementById('fab-btn').style.display = 'flex';
       openDrawer();
@@ -1748,6 +1924,116 @@ document.getElementById('file-input').addEventListener('change', evt => {
   reader.readAsText(file);
 });
 
+// ── Match library + resume ─────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) + ' ' +
+         d.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'});
+}
+
+// Restore a stored match: finished → result/export view, otherwise → resumable.
+function enterLoadedMatch(m) {
+  if (!m) return;
+  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  M = m;
+  _recBlob = null;
+  refreshHUD();
+  document.getElementById('fab-btn').style.display = 'flex';
+  if (M.finished) {
+    const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
+    showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
+  } else {
+    showResultScreen('MATCH PAUSED');
+  }
+}
+
+function renderLibrary() {
+  const idx = readIndex();
+  const kb  = Math.round(storageBytes() / 1024);
+  document.getElementById('lib-usage').textContent =
+    `${idx.length} match${idx.length === 1 ? '' : 'es'} · ~${kb} KB · keeps last ${LS_CAP}`;
+  const list = document.getElementById('lib-list');
+  list.innerHTML = '';
+  if (!idx.length) {
+    const empty = document.createElement('div');
+    empty.className = 'lib-empty';
+    empty.textContent = 'No saved matches yet.';
+    list.appendChild(empty);
+    return;
+  }
+  idx.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    const status = e.finished ? 'DONE' : 'LIVE';
+    row.innerHTML =
+      `<div class="lib-row-main">
+         <div class="lib-row-names">${esc(e.nameL)} <span class="lib-vs">vs</span> ${esc(e.nameR)}</div>
+         <div class="lib-row-meta">${e.scoreL} – ${e.scoreR} · ${esc((e.weapon||'foil').toUpperCase())} · ${fmtDate(e.createdAt || e.savedAt)} · <span class="lib-status ${e.finished?'done':'live'}">${status}</span></div>
+       </div>`;
+    const load = document.createElement('button');
+    load.className = 'lib-load';
+    load.textContent = 'LOAD';
+    load.addEventListener('touchend', ev => {
+      ev.preventDefault(); enterLoadedMatch(loadMatch(e.id));
+    }, {passive:false});
+    const del = document.createElement('button');
+    del.className = 'lib-del';
+    del.textContent = '🗑';
+    del.setAttribute('aria-label', 'Delete match');
+    del.addEventListener('touchend', ev => {
+      ev.preventDefault();
+      if (confirm(`Delete ${e.nameL} vs ${e.nameR}?`)) { deleteMatch(e.id); renderLibrary(); }
+    }, {passive:false});
+    row.appendChild(load);
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+// Show a resume prompt on setup when an unfinished match is stored.
+let _resumeDismissedId = null;
+function checkResume() {
+  const banner = document.getElementById('resume-banner');
+  const m = readIndex().find(e => !e.finished);
+  if (!m || m.id === _resumeDismissedId) { banner.classList.remove('on'); return; }
+  document.getElementById('resume-text').textContent = `Resume ${m.nameL} vs ${m.nameR}?`;
+  banner.dataset.id = m.id;
+  banner.classList.add('on');
+}
+
+document.getElementById('btn-library').addEventListener('touchend', e => {
+  e.preventDefault(); renderLibrary(); showScreen('s-library');
+}, {passive:false});
+
+document.getElementById('lib-back').addEventListener('touchend', e => {
+  e.preventDefault(); checkResume(); showScreen('s-setup');
+}, {passive:false});
+
+document.getElementById('lib-clear').addEventListener('touchend', e => {
+  e.preventDefault();
+  if (confirm('Delete ALL saved matches?')) { clearAllMatches(); renderLibrary(); }
+}, {passive:false});
+
+document.getElementById('resume-yes').addEventListener('touchend', e => {
+  e.preventDefault();
+  const banner = document.getElementById('resume-banner');
+  const m = loadMatch(banner.dataset.id);
+  banner.classList.remove('on');
+  enterLoadedMatch(m);
+}, {passive:false});
+
+document.getElementById('resume-no').addEventListener('touchend', e => {
+  e.preventDefault();
+  const banner = document.getElementById('resume-banner');
+  _resumeDismissedId = banner.dataset.id;
+  banner.classList.remove('on');
+}, {passive:false});
+
 // ── Portrait lock ─────────────────────────────────────────────────────────────
 function checkOrientation() {
   const ov = document.getElementById('portrait-overlay');
@@ -1755,6 +2041,7 @@ function checkOrientation() {
 }
 window.addEventListener('resize', checkOrientation);
 checkOrientation();
+checkResume();
 
 // ── Settings state ────────────────────────────────────────────────────────────
 const CFG = { weapon:'foil', periods:1, duration:3, format:'DE' };

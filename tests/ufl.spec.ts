@@ -73,3 +73,144 @@ test.describe('UFL fencing app', () => {
     await expect(page.locator('#s-setup.active')).toBeVisible();
   });
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// Record one left-side hit deterministically via the app's confirm path.
+const recordHit = (page: Page) => page.evaluate(() => (window as any).doConfirm('L', 100, true));
+
+test.describe('UX-1 persistence', () => {
+  test('match start writes a UUID-keyed index entry and snapshot', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await page.waitForTimeout(400);
+
+    const idx = await page.evaluate(() => JSON.parse(localStorage.getItem('ufl:index') || '[]'));
+    expect(idx).toHaveLength(1);
+    expect(idx[0].id).toMatch(UUID_RE);
+    expect(idx[0].finished).toBe(false);
+
+    const client = await page.evaluate(() => localStorage.getItem('ufl:clientId'));
+    expect(client).toMatch(UUID_RE);
+
+    const snap = await page.evaluate(id => JSON.parse(localStorage.getItem('ufl:match:' + id) || 'null'), idx[0].id);
+    expect(snap.matchId).toBe(idx[0].id);
+    expect(snap.clientId).toBe(client);
+  });
+
+  test('recorded events persist with piste:null', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+
+    const snap = await page.evaluate(() => {
+      const id = JSON.parse(localStorage.getItem('ufl:index') || '[]')[0].id;
+      return JSON.parse(localStorage.getItem('ufl:match:' + id) || 'null');
+    });
+    expect(snap.scoreL).toBe(1);
+    expect(snap.events.length).toBeGreaterThanOrEqual(1);
+    expect(snap.events.every((e: any) => 'piste' in e && e.piste === null)).toBe(true);
+  });
+
+  test('autosave survives reload and the resume banner restores the match', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+
+    await page.reload();
+    await expect(page.locator('#s-setup.active')).toBeVisible();
+    await expect(page.locator('#resume-banner')).toHaveClass(/on/);
+    await expect(page.locator('#resume-text')).toContainText('Resume LEFT vs RIGHT');
+
+    await page.locator('#resume-yes').tap();
+    await expect(page.locator('#s-result.active')).toBeVisible();
+    await expect(page.locator('#res-score-l')).toHaveText('1');
+  });
+
+  test('dismissing the resume banner hides it without deleting the match', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+
+    await page.reload();
+    await expect(page.locator('#resume-banner')).toHaveClass(/on/);
+    await page.locator('#resume-no').tap();
+    await expect(page.locator('#resume-banner')).not.toHaveClass(/on/);
+
+    // still in the library
+    await page.locator('#btn-library').tap();
+    await expect(page.locator('.lib-row')).toHaveCount(1);
+  });
+
+  test('finished match does not trigger the resume banner', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await page.locator('#pause-btn').tap();
+    await page.locator('#res-end').tap();
+    await page.waitForTimeout(300);
+
+    await page.reload();
+    await expect(page.locator('#s-setup.active')).toBeVisible();
+    await expect(page.locator('#resume-banner')).not.toHaveClass(/on/);
+  });
+
+  test('library lists a saved match and loads it', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+
+    await page.reload();
+    await page.locator('#btn-library').tap();
+    await expect(page.locator('#s-library.active')).toBeVisible();
+    await expect(page.locator('.lib-row')).toHaveCount(1);
+    await expect(page.locator('.lib-row-names').first()).toContainText('LEFT');
+    await expect(page.locator('.lib-status.live').first()).toBeVisible();
+
+    await page.locator('.lib-load').first().tap();
+    await expect(page.locator('#s-result.active')).toBeVisible();
+    await expect(page.locator('#res-score-l')).toHaveText('1');
+  });
+
+  test('delete removes a match from the library', async ({ page }) => {
+    page.on('dialog', d => d.accept());
+
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+    await page.reload();
+
+    await page.locator('#btn-library').tap();
+    await expect(page.locator('.lib-row')).toHaveCount(1);
+
+    await page.locator('.lib-del').first().tap();
+    await expect(page.locator('.lib-row')).toHaveCount(0);
+    await expect(page.locator('.lib-empty')).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ufl:index') || '[]').length)).toBe(0);
+  });
+
+  test('clear all empties the library and storage', async ({ page }) => {
+    page.on('dialog', d => d.accept());
+
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await recordHit(page);
+    await page.waitForTimeout(400);
+    await page.reload();
+
+    await page.locator('#btn-library').tap();
+    await expect(page.locator('.lib-row')).toHaveCount(1);
+
+    await page.locator('#lib-clear').tap();
+    await expect(page.locator('.lib-row')).toHaveCount(0);
+    await expect(page.locator('.lib-empty')).toBeVisible();
+
+    const leftover = await page.evaluate(() =>
+      Object.keys(localStorage).filter(k => k.startsWith('ufl:match:')).length);
+    expect(leftover).toBe(0);
+  });
+});
