@@ -1718,30 +1718,6 @@ function waitForEvent(target, name) {
   });
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function waitForSeek(video) {
-  if (!video.seeking) return Promise.resolve();
-  return waitForEvent(video, 'seeked');
-}
-
-async function resolveVideoDuration(video) {
-  if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
-  const originalTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-  try {
-    video.currentTime = 1e9;
-    await waitForSeek(video);
-    const duration = video.duration;
-    video.currentTime = Math.max(0, Math.min(originalTime, Number.isFinite(duration) ? duration : 0));
-    await waitForSeek(video);
-    return Number.isFinite(duration) && duration > 0 ? duration : null;
-  } catch (_) {
-    return null;
-  }
-}
-
 function snapshotMatchForOverlay(match) {
   if (!match) return null;
   try {
@@ -1779,14 +1755,17 @@ async function renderOverlayVideo(file, source, opts) {
     const ctx = canvas.getContext('2d');
     if (!ctx || !canvas.captureStream) throw new Error('Canvas video capture is not supported in this browser');
 
-    const exportFps = 24;
-    const frameMs = 1000 / exportFps;
-    const requestFrameStream = canvas.captureStream(0);
-    const requestFrameTrack = requestFrameStream.getVideoTracks()[0];
-    const canRequestFrame = requestFrameTrack && typeof requestFrameTrack.requestFrame === 'function';
-    const stream = canRequestFrame ? requestFrameStream : canvas.captureStream(exportFps);
-    const canvasTrack = canRequestFrame ? requestFrameTrack : stream.getVideoTracks()[0];
-    const audioPreserved = false;
+    const exportFps = 30;
+    const stream = canvas.captureStream(exportFps);
+    const videoCapture = video.captureStream ? video.captureStream() :
+                         video.mozCaptureStream ? video.mozCaptureStream() : null;
+    let audioPreserved = false;
+    if (videoCapture) {
+      videoCapture.getAudioTracks().forEach(track => {
+        stream.addTrack(track);
+        audioPreserved = true;
+      });
+    }
 
     const mimeType = pickMime();
     const chunks = [];
@@ -1800,34 +1779,27 @@ async function renderOverlayVideo(file, source, opts) {
       recorder.onerror = () => reject(new Error('Overlay recording failed'));
     });
 
-    const drawFrameAt = async t => {
-      const target = Math.max(0, t);
-      if (Math.abs(video.currentTime - target) > 0.015) {
-        video.currentTime = target;
-        await waitForSeek(video);
-      }
+    let drawTimer = null;
+    const drawFrame = () => {
+      if (video.ended) return;
       ctx.drawImage(video, 0, 0, dim.width, dim.height);
       const liveMatch = M;
       try {
         M = renderMatch;
-        drawReplayHUDOverlay(ctx, dim.width, dim.height, target, timeOffset);
-        drawImportedOverlay(ctx, dim.width, dim.height, target, timeOffset);
+        drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
+        drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
       } finally {
         M = liveMatch;
       }
-      if (canRequestFrame) canvasTrack.requestFrame();
     };
 
-    const duration = await resolveVideoDuration(video);
-    if (!duration) throw new Error('Could not determine video duration for overlay export');
-
     recorder.start(1000);
-    video.pause();
-    const totalFrames = Math.max(1, Math.ceil(duration * exportFps));
-    for (let i = 0; i <= totalFrames; i++) {
-      await drawFrameAt(Math.min(duration, i / exportFps));
-      await sleep(frameMs);
-    }
+    await video.play();
+    drawFrame();
+    drawTimer = setInterval(drawFrame, 1000 / exportFps);
+    await waitForEvent(video, 'ended');
+    if (drawTimer) clearInterval(drawTimer);
+    drawFrame();
     if (typeof recorder.requestData === 'function') recorder.requestData();
     recorder.stop();
     await stopped;
@@ -1843,7 +1815,7 @@ async function renderOverlayVideo(file, source, opts) {
       mimeType: type,
       matchId: renderMatch.matchId || null,
       createdAt: Date.now(),
-      duration,
+      duration: video.duration || null,
       source,
     };
   } finally {
