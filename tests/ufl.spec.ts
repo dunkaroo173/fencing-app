@@ -323,6 +323,40 @@ test.describe('overlay video export', () => {
     });
   });
 
+  test('pause screen contributes to recorded overlay clock pauses', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const pause = await page.evaluate(() => {
+      _camState = 'recording';
+      _recPerfStart = performance.now() - 10700;
+      M.running = true;
+      M.timerSec = M.periodDuration - 8;
+      stopTimer();
+
+      const openPause = _recPauseOpen
+        ? { startVideo: _recPauseOpen.startVideo, boutTime: _recPauseOpen.boutTime }
+        : null;
+
+      _recPerfStart = performance.now() - 14700;
+      startTimer();
+
+      return {
+        openPause,
+        savedPause: M.recordingPauses[0],
+        mappedDuringPause: (window as any).videoTimeToBoutTime(12, -2.7, true),
+        mappedAfterPause: (window as any).videoTimeToBoutTime(16, -2.7, true),
+      };
+    });
+
+    expect(pause.openPause?.boutTime).toBe(8);
+    expect(pause.openPause?.startVideo).toBeGreaterThanOrEqual(10);
+    expect(pause.savedPause.boutTime).toBe(8);
+    expect(pause.savedPause.endVideo).toBeGreaterThan(pause.savedPause.startVideo);
+    expect(pause.mappedDuringPause).toBe(8);
+    expect(pause.mappedAfterPause).toBeCloseTo(16 - 2.7 - (pause.savedPause.endVideo - pause.savedPause.startVideo), 1);
+  });
+
   test('replays scoreboard state from event timestamps for video export', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
