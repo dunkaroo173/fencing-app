@@ -1435,8 +1435,6 @@ let _isRenderingOverlay = false;
 
 function pickMime() {
   const candidates = [
-    'video/mp4;codecs=avc1',
-    'video/mp4',
     'video/webm;codecs=vp8,opus',
     'video/webm;codecs=vp9,opus',
     'video/webm',
@@ -2097,19 +2095,7 @@ async function renderOverlayVideo(file, source, opts) {
     const ctx = canvas.getContext('2d');
     if (!ctx || !canvas.captureStream) throw new Error('Canvas video capture is not supported in this browser');
 
-    let stream = canvas.captureStream(30);
-    let requestCanvasFrame = () => {};
-    try {
-      const controlledStream = canvas.captureStream(0);
-      const controlledTrack = controlledStream.getVideoTracks()[0];
-      if (controlledTrack && typeof controlledTrack.requestFrame === 'function') {
-        stream.getTracks().forEach(track => track.stop());
-        stream = controlledStream;
-        requestCanvasFrame = () => controlledTrack.requestFrame();
-      } else {
-        controlledStream.getTracks().forEach(track => track.stop());
-      }
-    } catch (_) {}
+    const stream = canvas.captureStream(30);
     const videoCapture = video.captureStream ? video.captureStream() :
                          video.mozCaptureStream ? video.mozCaptureStream() : null;
     let audioPreserved = false;
@@ -2151,7 +2137,6 @@ async function renderOverlayVideo(file, source, opts) {
       } finally {
         M = liveMatch;
       }
-      requestCanvasFrame();
     };
 
     recorder.start(1000);
