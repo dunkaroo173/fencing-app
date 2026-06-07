@@ -266,6 +266,39 @@ test.describe('overlay video export', () => {
     expect(snap.recordingStartPeriodTs).toBeCloseTo(-2.7);
   });
 
+  test('ending a match stops active recording immediately', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const stopped = await page.evaluate(() => {
+      (window as any).__recorderStopped = false;
+      (window as any).__trackStopped = false;
+      _camState = 'recording';
+      _mediaRec = {
+        state: 'recording',
+        requestData() {},
+        stop() {
+          this.state = 'inactive';
+          (window as any).__recorderStopped = true;
+        },
+      } as any;
+      _camStream = {
+        getTracks() {
+          return [{ stop() { (window as any).__trackStopped = true; } }];
+        },
+      } as any;
+
+      finishMatch();
+      return {
+        recorder: (window as any).__recorderStopped,
+        track: (window as any).__trackStopped,
+        camState: _camState,
+      };
+    });
+
+    expect(stopped).toEqual({ recorder: true, track: true, camState: 'stopping' });
+  });
+
   test('replays scoreboard state from event timestamps for video export', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);

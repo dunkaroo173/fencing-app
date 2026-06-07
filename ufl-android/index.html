@@ -660,11 +660,7 @@ function endPeriod() {
 
 function finishMatch() {
   stopTimer();
-  if (_camState === 'recording') {
-    _autoStop = true;
-    if (_mediaRec) _mediaRec.stop();
-    if (_camStream) _camStream.getTracks().forEach(t => t.stop());
-  }
+  stopActiveRecording({ autoStop: true });
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
@@ -1213,7 +1209,7 @@ function renderEventsList() {
 let _camStream    = null;
 let _mediaRec     = null;
 let _recChunks    = [];
-let _camState     = 'idle'; // idle | preview | recording
+let _camState     = 'idle'; // idle | preview | recording | stopping
 let _mimeType     = '';
 let _recBlob      = null;   // retained blob for post-match video export
 let _autoStop     = false;  // true when finishMatch() triggers stop
@@ -1265,6 +1261,31 @@ function resetCamUI() {
   _camStream = null;
   _mediaRec  = null;
   _recChunks = [];
+}
+
+function stopActiveRecording(opts = {}) {
+  if (_camState !== 'recording') return false;
+  _autoStop = !!opts.autoStop;
+  _camState = 'stopping';
+
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+  const btn = document.getElementById('cam-btn');
+  const recDot = document.getElementById('rec-dot');
+  btn.classList.remove('recording');
+  btn.textContent = '📷';
+  recDot.classList.remove('on');
+
+  try {
+    if (_mediaRec && _mediaRec.state === 'recording') {
+      if (typeof _mediaRec.requestData === 'function') _mediaRec.requestData();
+      _mediaRec.stop();
+    }
+  } catch (_) {
+    resetCamUI();
+  }
+
+  if (_camStream) _camStream.getTracks().forEach(t => t.stop());
+  return true;
 }
 
 function rrect(ctx, x, y, w, h, r) {
@@ -1539,6 +1560,7 @@ function drawReplayHUDOverlay(ctx, W, H, currentTime, timeOffset) {
 }
 
 async function toggleCamera() {
+  if (_camState === 'stopping') return;
   const btn     = document.getElementById('cam-btn');
   const preview = document.getElementById('cam-preview');
   const recDot  = document.getElementById('rec-dot');
@@ -1629,8 +1651,7 @@ async function toggleCamera() {
 
   // ── RECORDING → STOP + SAVE ─────────────────────────────────────────────────
   if (_camState === 'recording') {
-    _mediaRec.stop();
-    _camStream.getTracks().forEach(t => t.stop());
+    stopActiveRecording({ autoStop: false });
   }
 }
 
