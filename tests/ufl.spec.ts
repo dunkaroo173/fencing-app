@@ -323,6 +323,27 @@ test.describe('overlay video export', () => {
     });
   });
 
+  test('recorded pause mapping never rewinds overlay clock', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const mapped = await page.evaluate(() => {
+      M.recordingPauses = [
+        { startVideo: 10, endVideo: 14, boutTime: 6 },
+      ];
+      return {
+        beforePause: (window as any).videoTimeToBoutTime(12, -2.7, false),
+        duringPause: (window as any).videoTimeToBoutTime(12, -2.7, true),
+        afterPause: (window as any).videoTimeToBoutTime(16, -2.7, true),
+      };
+    });
+
+    expect(mapped.beforePause).toBeCloseTo(9.3);
+    expect(mapped.duringPause).toBeCloseTo(10 - 2.7);
+    expect(mapped.duringPause).toBeGreaterThanOrEqual(10 - 2.7);
+    expect(mapped.afterPause).toBeCloseTo(16 - 2.7 - 4);
+  });
+
   test('pause screen contributes to recorded overlay clock pauses', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
@@ -353,7 +374,7 @@ test.describe('overlay video export', () => {
     expect(pause.openPause?.startVideo).toBeGreaterThanOrEqual(10);
     expect(pause.savedPause.boutTime).toBe(8);
     expect(pause.savedPause.endVideo).toBeGreaterThan(pause.savedPause.startVideo);
-    expect(pause.mappedDuringPause).toBe(8);
+    expect(pause.mappedDuringPause).toBeCloseTo(8, 2);
     expect(pause.mappedAfterPause).toBeCloseTo(16 - 2.7 - (pause.savedPause.endVideo - pause.savedPause.startVideo), 1);
   });
 

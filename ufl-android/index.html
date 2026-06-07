@@ -1529,16 +1529,26 @@ function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
       endVideo: Number(p.endVideo),
       boutTime: Number(p.boutTime),
     }))
-    .filter(p => Number.isFinite(p.startVideo))
+    .filter(p => Number.isFinite(p.startVideo) && Number.isFinite(p.endVideo) && p.endVideo > p.startVideo)
     .sort((a, b) => a.startVideo - b.startVideo);
 
+  let pausedTotal = 0;
+  let cursor = 0;
   for (const p of pauses) {
-    if (t <= p.startVideo) break;
-    const end = Number.isFinite(p.endVideo) ? p.endVideo : t;
-    if (t < end) return Number.isFinite(p.boutTime) ? p.boutTime : boutTime;
-    boutTime -= Math.max(0, end - p.startVideo);
+    const start = Math.max(p.startVideo, cursor);
+    const end = Math.max(p.endVideo, start);
+    if (end <= start) continue;
+    if (t <= start) break;
+
+    const timelineBoutAtPauseStart = start + (Number(timeOffset) || 0) - pausedTotal;
+    const storedBout = Number.isFinite(p.boutTime) ? p.boutTime : timelineBoutAtPauseStart;
+    const freezeBout = Math.max(storedBout, timelineBoutAtPauseStart);
+
+    if (t < end) return freezeBout;
+    pausedTotal += end - start;
+    cursor = end;
   }
-  return boutTime;
+  return boutTime - pausedTotal;
 }
 
 function markRecordingStart(boutElapsed) {
