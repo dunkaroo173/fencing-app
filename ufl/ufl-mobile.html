@@ -1636,6 +1636,50 @@ function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   drawActionPill(ctx, W, H, visible.ev, alpha);
 }
 
+function replayStateAt(boutTime, events) {
+  const periodDuration = Number(M?.periodDuration) || 180;
+  const totalPeriods = Number(M?.totalPeriods) || 1;
+  const period = Math.min(totalPeriods, Math.max(1, Math.floor(boutTime / periodDuration) + 1));
+  const periodElapsed = Math.max(0, boutTime - (period - 1) * periodDuration);
+  const state = {
+    nameL: M?.nameL || 'LEFT',
+    nameR: M?.nameR || 'RIGHT',
+    scoreL: 0, scoreR: 0,
+    hpL: 100, hpR: 100,
+    cardsL: [], cardsR: [],
+    timerSec: Math.max(0, periodDuration - Math.floor(periodElapsed)),
+    period,
+  };
+  (events || M?.events || []).forEach(ev => {
+    if (overlayEventTime(ev) > boutTime) return;
+    if (ev.isHit) {
+      if (ev.side === 'L') { state.scoreL++; state.hpR = Math.max(0, state.hpR - 10); }
+      if (ev.side === 'R') { state.scoreR++; state.hpL = Math.max(0, state.hpL - 10); }
+    }
+    if (ev.actionId === 190 || ev.actionId === 191) {
+      state.cardsL.push(ev.emoji);
+      if (ev.actionId === 191) { state.scoreR++; state.hpL = Math.max(0, state.hpL - 5); }
+    }
+    if (ev.actionId === 290 || ev.actionId === 291) {
+      state.cardsR.push(ev.emoji);
+      if (ev.actionId === 291) { state.scoreL++; state.hpR = Math.max(0, state.hpR - 5); }
+    }
+  });
+  return state;
+}
+
+function drawReplayHUDOverlay(ctx, W, H, currentTime, timeOffset) {
+  if (!M) return;
+  const state = replayStateAt(currentTime + (Number(timeOffset) || 0));
+  const saved = M;
+  try {
+    M = { ...M, ...state };
+    drawHUDOverlay(ctx, W, H, { includeAction: false });
+  } finally {
+    M = saved;
+  }
+}
+
 async function toggleCamera() {
   const btn     = document.getElementById('cam-btn');
   const preview = document.getElementById('cam-preview');
@@ -1684,7 +1728,6 @@ async function toggleCamera() {
     const drawFrame = () => {
       if (!_recCtx) return;
       _recCtx.drawImage(preview, 0, 0, 1280, 720);
-      drawHUDOverlay(_recCtx, 1280, 720, { includeAction: false });
       _rafId = requestAnimationFrame(drawFrame);
     };
     drawFrame();
@@ -1846,6 +1889,7 @@ async function renderOverlayVideo(file, source, opts) {
     const drawFrame = () => {
       if (video.ended || video.paused) return;
       ctx.drawImage(video, 0, 0, dim.width, dim.height);
+      drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
       drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
       requestAnimationFrame(drawFrame);
     };

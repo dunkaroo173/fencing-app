@@ -250,6 +250,28 @@ test.describe('overlay video export', () => {
     expect(snap.recordingStartPeriodTs).toBe(0);
   });
 
+  test('replays scoreboard state from event timestamps for video export', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const states = await page.evaluate(() => {
+      const events = [
+        { ts: 7, period: 1, side: 'R', label: 'Simple Attack', isHit: true, actionId: 200 },
+        { ts: 13, period: 1, side: 'R', label: 'Counterattack', isHit: true, actionId: 220 },
+      ];
+      return [
+        (window as any).replayStateAt(6, events),
+        (window as any).replayStateAt(7, events),
+        (window as any).replayStateAt(13, events),
+      ].map((s: any) => ({ scoreL: s.scoreL, scoreR: s.scoreR, timerSec: s.timerSec }));
+    });
+    expect(states).toEqual([
+      { scoreL: 0, scoreR: 0, timerSec: 174 },
+      { scoreL: 0, scoreR: 1, timerSec: 173 },
+      { scoreL: 0, scoreR: 2, timerSec: 167 },
+    ]);
+  });
+
   test('unsupported overlay rendering shows an error without breaking exports', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
