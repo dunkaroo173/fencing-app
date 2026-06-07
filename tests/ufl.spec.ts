@@ -234,18 +234,6 @@ test.describe('overlay video export', () => {
     expect(mapped).toBe(192);
   });
 
-  test('collapses dense action clusters to the final overlay label', async ({ page }) => {
-    await page.goto(APP_PATH);
-    await startMatch(page);
-
-    const labels = await page.evaluate(() => {
-      (window as any).doConfirm('R', 210, true);
-      (window as any).doConfirm('R', 220, true);
-      return (window as any).overlayReplayEvents().map((ev: any) => ev.label);
-    });
-    expect(labels).toEqual(['Counterattack']);
-  });
-
   test('records video start offset in the match JSON snapshot', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);

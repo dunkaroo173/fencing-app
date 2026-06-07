@@ -1414,7 +1414,6 @@ let _lastActionAt = 0;      // performance.now() timestamp
 let _recBoutStart = 0;      // bout-time offset when recording started
 let _importVideoFile = null;
 let _isRenderingOverlay = false;
-const OVERLAY_CLUSTER_SEC = 4; // only show the final label within one halt/action burst
 
 function pickMime() {
   const candidates = [
@@ -1467,8 +1466,9 @@ function rrect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawHUDOverlay(ctx, W, H) {
+function drawHUDOverlay(ctx, W, H, opts) {
   if (!M) return;
+  const includeAction = !opts || opts.includeAction !== false;
   const hudH  = Math.round(H * 0.09);
   const pad   = Math.round(W * 0.012);
   const scoreW = Math.round(W * 0.042);
@@ -1541,7 +1541,7 @@ function drawHUDOverlay(ctx, W, H) {
 
   // ── LAST ACTION pill (fades out after 3 s) ─────────────────────────────────
   const elapsed = performance.now() - _lastActionAt;
-  if (_lastAction && elapsed < 3000) {
+  if (includeAction && _lastAction && elapsed < 3000) {
     const alpha  = elapsed < 2400 ? 1 : 1 - (elapsed - 2400) / 600;
     const fSize  = Math.round(H * 0.033);
     const txt    = _lastAction.emoji + '  ' + _lastAction.label +
@@ -1626,7 +1626,7 @@ function markRecordingStart() {
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   if (!M || !M.events) return;
   const boutTime = currentTime + (Number(timeOffset) || 0);
-  const visible = overlayReplayEvents()
+  const visible = M.events
     .map(ev => ({ ev, t: overlayEventTime(ev) }))
     .filter(x => boutTime >= x.t && boutTime < x.t + 3)
     .pop();
@@ -1634,14 +1634,6 @@ function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   const elapsed = boutTime - visible.t;
   const alpha = elapsed < 2.4 ? 1 : Math.max(0, 1 - (elapsed - 2.4) / 0.6);
   drawActionPill(ctx, W, H, visible.ev, alpha);
-}
-
-function overlayReplayEvents() {
-  if (!M || !M.events) return [];
-  return M.events.filter((ev, i, events) => {
-    const next = events[i + 1];
-    return !next || overlayEventTime(next) - overlayEventTime(ev) > OVERLAY_CLUSTER_SEC;
-  });
 }
 
 async function toggleCamera() {
@@ -1692,7 +1684,7 @@ async function toggleCamera() {
     const drawFrame = () => {
       if (!_recCtx) return;
       _recCtx.drawImage(preview, 0, 0, 1280, 720);
-      drawHUDOverlay(_recCtx, 1280, 720);
+      drawHUDOverlay(_recCtx, 1280, 720, { includeAction: false });
       _rafId = requestAnimationFrame(drawFrame);
     };
     drawFrame();
