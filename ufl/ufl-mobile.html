@@ -1411,6 +1411,7 @@ let _lastActionAt = 0;      // performance.now() timestamp
 let _recBoutStart = 0;      // bout-time offset when recording started
 let _importVideoFile = null;
 let _isRenderingOverlay = false;
+const OVERLAY_CLUSTER_SEC = 4; // only show the final label within one halt/action burst
 
 function pickMime() {
   const candidates = [
@@ -1611,7 +1612,7 @@ function currentBoutElapsed() {
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   if (!M || !M.events) return;
   const boutTime = currentTime + (Number(timeOffset) || 0);
-  const visible = M.events
+  const visible = overlayReplayEvents()
     .map(ev => ({ ev, t: overlayEventTime(ev) }))
     .filter(x => boutTime >= x.t && boutTime < x.t + 3)
     .pop();
@@ -1619,6 +1620,14 @@ function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   const elapsed = boutTime - visible.t;
   const alpha = elapsed < 2.4 ? 1 : Math.max(0, 1 - (elapsed - 2.4) / 0.6);
   drawActionPill(ctx, W, H, visible.ev, alpha);
+}
+
+function overlayReplayEvents() {
+  if (!M || !M.events) return [];
+  return M.events.filter((ev, i, events) => {
+    const next = events[i + 1];
+    return !next || overlayEventTime(next) - overlayEventTime(ev) > OVERLAY_CLUSTER_SEC;
+  });
 }
 
 async function toggleCamera() {
