@@ -1213,6 +1213,7 @@ let _recCtx       = null;
 let _rafId        = null;   // requestAnimationFrame handle
 let _lastAction   = null;   // {emoji,label,side} — shown on canvas for 3 s
 let _lastActionAt = 0;      // performance.now() timestamp
+let _recBoutStart = 0;      // bout-time offset when recording started
 let _importVideoFile = null;
 let _isRenderingOverlay = false;
 
@@ -1406,14 +1407,21 @@ function overlayEventTime(ev) {
   return (period - 1) * (Number(M.periodDuration) || 0) + (Number(ev.ts) || 0);
 }
 
-function drawImportedOverlay(ctx, W, H, currentTime) {
+function currentBoutElapsed() {
+  if (!M) return 0;
+  return (Math.max(1, Number(M.period) || 1) - 1) * (Number(M.periodDuration) || 0) +
+         ((Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0));
+}
+
+function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   if (!M || !M.events) return;
+  const boutTime = currentTime + (Number(timeOffset) || 0);
   const visible = M.events
     .map(ev => ({ ev, t: overlayEventTime(ev) }))
-    .filter(x => currentTime >= x.t && currentTime < x.t + 3)
+    .filter(x => boutTime >= x.t && boutTime < x.t + 3)
     .pop();
   if (!visible) return;
-  const elapsed = currentTime - visible.t;
+  const elapsed = boutTime - visible.t;
   const alpha = elapsed < 2.4 ? 1 : Math.max(0, 1 - (elapsed - 2.4) / 0.6);
   drawActionPill(ctx, W, H, visible.ev, alpha);
 }
@@ -1490,6 +1498,16 @@ async function toggleCamera() {
     }
     _mediaRec.ondataavailable = e => { if (e.data && e.data.size) _recChunks.push(e.data); };
     _mediaRec.onerror = () => { showCamError('Recording error — stopping'); resetCamUI(); };
+    _mediaRec.onstop = () => {
+      if (_recChunks.length === 0) { showCamError('No data recorded'); resetCamUI(); return; }
+      const mime = _mimeType || 'video/webm';
+      _recBlob = new Blob(_recChunks, { type: mime });
+      const shouldExportNow = !_autoStop;
+      _autoStop = false;
+      resetCamUI();
+      if (shouldExportNow) exportVideo();
+    };
+    _recBoutStart = currentBoutElapsed();
     _mediaRec.start(1000);
     recDot.classList.add('on');
     btn.classList.add('recording');
@@ -1500,16 +1518,6 @@ async function toggleCamera() {
 
   // ── RECORDING → STOP + SAVE ─────────────────────────────────────────────────
   if (_camState === 'recording') {
-    _mediaRec.onstop = () => {
-      if (_recChunks.length === 0) { showCamError('No data recorded'); resetCamUI(); return; }
-      const mime = _mimeType || 'video/webm';
-      _recBlob = new Blob(_recChunks, { type: mime });
-      if (!_autoStop) {
-        shareOrDownload(_recBlob, overlayFilename('recorded', camExt()));
-      }
-      _autoStop = false;
-      resetCamUI();
-    };
     _mediaRec.stop();
     _camStream.getTracks().forEach(t => t.stop());
   }
@@ -1578,10 +1586,11 @@ function waitForEvent(target, name) {
   });
 }
 
-async function renderOverlayVideo(file, source) {
+async function renderOverlayVideo(file, source, opts) {
   if (!M) throw new Error('No match loaded');
   if (!file) throw new Error('Import a video first');
   if (typeof MediaRecorder === 'undefined') throw new Error('Overlay export is not supported in this browser');
+  const timeOffset = opts && Number(opts.timeOffset) ? Number(opts.timeOffset) : 0;
 
   const video = document.createElement('video');
   const url = URL.createObjectURL(file);
@@ -1627,7 +1636,7 @@ async function renderOverlayVideo(file, source) {
     const drawFrame = () => {
       if (video.ended || video.paused) return;
       ctx.drawImage(video, 0, 0, dim.width, dim.height);
-      drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime);
+      drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
       requestAnimationFrame(drawFrame);
     };
 
@@ -1686,15 +1695,15 @@ function exportTXT() {
 
 function exportVideo() {
   if (!_recBlob) return;
-  shareOrDownload(_recBlob, overlayFilename('recorded', camExt()));
+  exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: _recBoutStart });
 }
 
-async function exportImportedOverlay() {
+async function exportRenderedOverlay(file, source, opts) {
   if (_isRenderingOverlay) return;
   _isRenderingOverlay = true;
   setOverlayStatus('Rendering overlay video. Keep this screen open.', true);
   try {
-    const rendered = await renderOverlayVideo(_importVideoFile, 'imported');
+    const rendered = await renderOverlayVideo(file, source, opts);
     if (document.getElementById('overlay-status').textContent === 'Rendering overlay video. Keep this screen open.') {
       setOverlayStatus('Overlay rendered.', false);
     }
@@ -1710,6 +1719,10 @@ async function exportImportedOverlay() {
       setOverlayStatus(status ? status.textContent : '', false);
     }
   }
+}
+
+async function exportImportedOverlay() {
+  exportRenderedOverlay(_importVideoFile, 'imported', { timeOffset: 0 });
 }
 
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
