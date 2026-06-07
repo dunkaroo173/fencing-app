@@ -673,6 +673,8 @@ function finishMatch() {
 }
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
+const START_COUNTDOWN_SECONDS = 2.7;
+
 function runCountdown(cb) {
   showScreen('s-countdown');
   let n = 3;
@@ -689,13 +691,17 @@ function runCountdown(cb) {
 }
 
 // ── Start / Resume ────────────────────────────────────────────────────────────
-function clickStart() {
+async function clickStart() {
   const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
   M = newMatchState({ nameL, nameR, ...CFG });
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
   document.getElementById('hud-name-r').textContent = nameR;
+  showScreen('s-match');
+  document.getElementById('pause-btn').style.display  = 'block';
+  document.getElementById('resume-btn').style.display = 'none';
+  await prepareRecordingBeforeStart();
   runCountdown(() => {
     showScreen('s-match');
     document.getElementById('pause-btn').style.display  = 'block';
@@ -1379,30 +1385,65 @@ function drawHUDOverlay(ctx, W, H, opts) {
 
 function drawActionPill(ctx, W, H, ev, alpha) {
   if (!ev) return;
-  const fSize = Math.max(18, Math.round(H * 0.033));
-  const txt = ev.emoji + '  ' + ev.label + (ev.isHit ? '' : '  [OFF TARGET]');
+  const sideCol = ev.side === 'L' ? '#00c7ff' : ev.side === 'R' ? '#e62600' : '#f5c842';
+  const sideName = ev.side === 'L' ? 'LEFT' : ev.side === 'R' ? 'RIGHT' : 'REFEREE';
+  const action = String(ev.label || 'ACTION').toUpperCase();
+  const result = ev.isHit ? 'TOUCH' : 'OFF TARGET';
+  const titleSize = Math.max(24, Math.round(H * 0.047));
+  const metaSize = Math.max(13, Math.round(H * 0.018));
+  const resultSize = Math.max(14, Math.round(H * 0.021));
   ctx.save();
-  ctx.font = `bold ${fSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const tw = ctx.measureText(txt).width;
-  const pw = Math.min(W - 28, tw + 44);
-  const ph = fSize * 2.2;
-  const py = H * 0.82;
 
-  ctx.globalAlpha = alpha * 0.88;
-  ctx.fillStyle = '#07080c';
-  rrect(ctx, W / 2 - pw / 2, py - ph / 2, pw, ph, ph / 2);
-  ctx.fill();
+  ctx.font = `900 ${titleSize}px sans-serif`;
+  const actionWidth = ctx.measureText(action).width;
+  ctx.font = `900 ${resultSize}px sans-serif`;
+  const resultWidth = ctx.measureText(result).width + 34;
+  const pw = Math.min(W - 32, Math.max(W * 0.45, actionWidth + resultWidth + 86));
+  const ph = Math.max(86, titleSize * 2.45);
+  const x = W / 2 - pw / 2;
+  const y = H * 0.77 - ph / 2;
+  const radius = 14;
 
-  const sideCol = ev.side === 'L' ? '#00c7ff' : ev.side === 'R' ? '#e62600' : '#f5c842';
   ctx.globalAlpha = alpha;
+  ctx.shadowColor = 'rgba(0,0,0,.75)';
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 7;
+  ctx.fillStyle = 'rgba(2, 4, 10, .93)';
+  rrect(ctx, x, y, pw, ph, radius);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  ctx.strokeStyle = sideCol;
+  ctx.lineWidth = 3;
+  rrect(ctx, x + 1.5, y + 1.5, pw - 3, ph - 3, radius);
+  ctx.stroke();
+
   ctx.fillStyle = sideCol;
-  rrect(ctx, W / 2 - pw / 2, py - ph / 2, 5, ph, 3);
+  rrect(ctx, x, y, 8, ph, radius);
   ctx.fill();
 
+  ctx.font = `800 ${metaSize}px sans-serif`;
+  ctx.fillStyle = sideCol;
+  ctx.fillText(`${sideName} ACTION`, W / 2, y + 20);
+
+  ctx.font = `900 ${titleSize}px sans-serif`;
   ctx.fillStyle = '#fff';
-  ctx.fillText(txt, W / 2, py, pw - 30);
+  ctx.strokeStyle = 'rgba(0,0,0,.9)';
+  ctx.lineWidth = 5;
+  ctx.strokeText(action, W / 2, y + ph / 2 + 4, pw - resultWidth - 42);
+  ctx.fillText(action, W / 2, y + ph / 2 + 4, pw - resultWidth - 42);
+
+  const bx = x + pw - resultWidth - 18;
+  const by = y + ph - 35;
+  ctx.fillStyle = ev.isHit ? sideCol : 'rgba(255, 206, 84, .95)';
+  rrect(ctx, bx, by - 14, resultWidth, 28, 14);
+  ctx.fill();
+  ctx.font = `900 ${resultSize}px sans-serif`;
+  ctx.fillStyle = ev.isHit ? '#02040a' : '#221600';
+  ctx.fillText(result, bx + resultWidth / 2, by + 1);
   ctx.restore();
 }
 
@@ -1417,15 +1458,27 @@ function currentBoutElapsed() {
          ((Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0));
 }
 
-function markRecordingStart() {
-  _recBoutStart = currentBoutElapsed();
+function markRecordingStart(boutElapsed) {
+  _recBoutStart = Number.isFinite(Number(boutElapsed)) ? Number(boutElapsed) : currentBoutElapsed();
   if (M) {
     M.recordingStartBoutTs = _recBoutStart;
-    M.recordingStartPeriod = M.period;
-    M.recordingStartPeriodTs = (Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0);
+    M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
+    M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
     if (typeof scheduleSave === 'function') scheduleSave();
   }
   return _recBoutStart;
+}
+
+async function prepareRecordingBeforeStart() {
+  try {
+    if (_camState === 'idle') await toggleCamera();
+    if (_camState === 'preview') {
+      await toggleCamera();
+      if (_camState === 'recording') markRecordingStart(-START_COUNTDOWN_SECONDS);
+    }
+  } catch (_) {
+    // Camera setup is best-effort; the bout should still start if permissions fail.
+  }
 }
 
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {

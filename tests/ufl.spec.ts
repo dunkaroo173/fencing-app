@@ -250,6 +250,22 @@ test.describe('overlay video export', () => {
     expect(snap.recordingStartPeriodTs).toBe(0);
   });
 
+  test('can store a pre-clock recording offset for countdown capture', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const start = await page.evaluate(() => (window as any).markRecordingStart(-2.7));
+    await page.waitForTimeout(400);
+    const snap = await page.evaluate(() => {
+      const id = JSON.parse(localStorage.getItem('ufl:index') || '[]')[0].id;
+      return JSON.parse(localStorage.getItem('ufl:match:' + id) || 'null');
+    });
+    expect(start).toBeCloseTo(-2.7);
+    expect(snap.recordingStartBoutTs).toBeCloseTo(-2.7);
+    expect(snap.recordingStartPeriod).toBe(1);
+    expect(snap.recordingStartPeriodTs).toBeCloseTo(-2.7);
+  });
+
   test('replays scoreboard state from event timestamps for video export', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
