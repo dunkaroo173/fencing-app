@@ -585,6 +585,9 @@ function newMatchState(cfg) {
     running: false,
     finished: false,
     events: [],
+    recordingStartBoutTs: null,
+    recordingStartPeriod: null,
+    recordingStartPeriodTs: null,
     startTime: null,
     elapsedMs: 0,
   };
@@ -1414,6 +1417,17 @@ function currentBoutElapsed() {
          ((Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0));
 }
 
+function markRecordingStart() {
+  _recBoutStart = currentBoutElapsed();
+  if (M) {
+    M.recordingStartBoutTs = _recBoutStart;
+    M.recordingStartPeriod = M.period;
+    M.recordingStartPeriodTs = (Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0);
+    if (typeof scheduleSave === 'function') scheduleSave();
+  }
+  return _recBoutStart;
+}
+
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
   if (!M || !M.events) return;
   const boutTime = currentTime + (Number(timeOffset) || 0);
@@ -1516,7 +1530,7 @@ async function toggleCamera() {
       resetCamUI();
       if (shouldExportNow) exportVideo();
     };
-    _recBoutStart = currentBoutElapsed();
+    markRecordingStart();
     _mediaRec.start(1000);
     recDot.classList.add('on');
     btn.classList.add('recording');
@@ -1704,7 +1718,10 @@ function exportTXT() {
 
 function exportVideo() {
   if (!_recBlob) return;
-  exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: _recBoutStart });
+  const start = M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined
+    ? Number(M.recordingStartBoutTs)
+    : _recBoutStart;
+  exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: start });
 }
 
 async function exportRenderedOverlay(file, source, opts) {

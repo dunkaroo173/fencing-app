@@ -246,6 +246,22 @@ test.describe('overlay video export', () => {
     expect(labels).toEqual(['Counterattack']);
   });
 
+  test('records video start offset in the match JSON snapshot', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const start = await page.evaluate(() => (window as any).markRecordingStart());
+    await page.waitForTimeout(400);
+    const snap = await page.evaluate(() => {
+      const id = JSON.parse(localStorage.getItem('ufl:index') || '[]')[0].id;
+      return JSON.parse(localStorage.getItem('ufl:match:' + id) || 'null');
+    });
+    expect(start).toBe(0);
+    expect(snap.recordingStartBoutTs).toBe(0);
+    expect(snap.recordingStartPeriod).toBe(1);
+    expect(snap.recordingStartPeriodTs).toBe(0);
+  });
+
   test('unsupported overlay rendering shows an error without breaking exports', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
