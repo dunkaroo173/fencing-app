@@ -227,6 +227,46 @@ test.describe('overlay video export', () => {
     await expect(page.locator('#overlay-status')).toBeVisible();
   });
 
+  test('imported-video setup does not auto-start camera recording', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await page.evaluate(() => {
+      _importVideoFile = new File(['video'], 'bout.webm', { type: 'video/webm' });
+      (window as any).__prepareRecordingCalls = 0;
+      prepareRecordingBeforeStart = async () => { (window as any).__prepareRecordingCalls++; };
+    });
+
+    await startMatch(page);
+
+    const calls = await page.evaluate(() => (window as any).__prepareRecordingCalls);
+    expect(calls).toBe(0);
+  });
+
+  test('imported-video annotation can continue past clock and score limits', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const state = await page.evaluate(async () => {
+      _importVideoFile = new File(['video'], 'bout.webm', { type: 'video/webm' });
+      M.timerSec = 0;
+      M.scoreL = 14;
+      refreshHUD();
+      doConfirm('L', 100, true);
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      stopTimer();
+      return {
+        finished: M.finished,
+        scoreL: M.scoreL,
+        timerSec: M.timerSec,
+        timerText: document.getElementById('timer-disp')?.textContent,
+      };
+    });
+
+    expect(state.finished).toBe(false);
+    expect(state.scoreL).toBe(15);
+    expect(state.timerSec).toBeLessThan(0);
+    expect(state.timerText).toBe('0:00');
+  });
+
   test('maps event timestamps across periods for imported overlay replay', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);

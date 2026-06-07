@@ -606,6 +606,7 @@ function showScreen(id) {
 }
 
 function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(Number(sec) || 0));
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2,'0')}`;
@@ -639,7 +640,7 @@ function startTimer() {
   resumeImportedVideo();
   _timerInterval = setInterval(() => {
     if (!M.running) return;
-    if (M.timerSec > 0) {
+    if (M.timerSec > 0 || isImportedVideoAnnotationMode()) {
       M.timerSec--;
       refreshHUD();
     } else {
@@ -708,7 +709,7 @@ async function clickStart() {
   document.getElementById('pause-btn').style.display  = 'block';
   document.getElementById('resume-btn').style.display = 'none';
   attachImportedVideoPreview(true);
-  await prepareRecordingBeforeStart();
+  if (!isImportedVideoAnnotationMode()) await prepareRecordingBeforeStart();
   runCountdown(() => {
     showScreen('s-match');
     document.getElementById('pause-btn').style.display  = 'block';
@@ -1188,7 +1189,7 @@ function doConfirm(side, actionId, isHit) {
 
   // Win condition: DE ends at 15 touches; poule at 5
   const maxScore = M.format === 'poule' ? 5 : 15;
-  if (M.scoreL >= maxScore || M.scoreR >= maxScore) { finishMatch(); return; }
+  if (!isImportedVideoAnnotationMode() && (M.scoreL >= maxScore || M.scoreR >= maxScore)) { finishMatch(); return; }
   if (!M.finished) startTimer();
 }
 
@@ -1331,6 +1332,10 @@ function resetImportedVideo(clearFile = false) {
     if (input) input.value = '';
     setImportVideoStatus('');
   }
+}
+
+function isImportedVideoAnnotationMode() {
+  return !!_importVideoFile;
 }
 
 function stopActiveRecording(opts = {}) {
