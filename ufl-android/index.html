@@ -50,6 +50,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .chip{padding:7px 14px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--muted);background:rgba(255,255,255,0);transition:all .15s;min-width:44px;text-align:center}
 .chip.active{background:rgba(255,255,255,0.45);color:#fff;border-color:rgba(255,255,255,0.4)}
 .setup-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:220px}
+.setup-video-status{min-height:14px;margin-top:8px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
 .rnd{width:100%;padding:14px;border-radius:28px;font-family:var(--body);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:none;transition:all .12s}
 .rnd:active{transform:scale(0.96)}
 .rnd-start{background:#0a39d4;color:#fff}
@@ -184,8 +185,9 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .stat-bar-n{font-family:var(--mono);font-size:11px;color:var(--text)}
 
 /* ── CAMERA ── */
-#cam-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.28;z-index:0;display:none;pointer-events:none}
-#cam-preview.on{display:block}
+#cam-preview,#import-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.28;z-index:0;display:none;pointer-events:none}
+#cam-preview.on,#import-preview.on{display:block}
+#import-preview{opacity:0.42}
 .cam-btn{position:absolute;top:8px;right:8px;width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,0.6);border:1.5px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:10;cursor:pointer;transition:transform .1s}
 .cam-btn:active{transform:scale(0.9)}
 .cam-btn.recording{border-color:var(--R);background:rgba(230,38,0,0.3)}
@@ -249,9 +251,11 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     </div>
     <div class="setup-btns">
       <button class="rnd rnd-start" id="btn-start">▶ START MATCH</button>
+      <button class="rnd rnd-end" id="btn-import-video">⬆ IMPORT VIDEO</button>
       <button class="rnd rnd-end" id="btn-load">⬆ LOAD JSON</button>
       <input type="file" id="file-input" accept=".json" style="display:none">
     </div>
+    <div class="setup-video-status" id="setup-video-status"></div>
   </div>
   <div class="setup-col right">
     <div class="setup-avatar" id="av-r">🤺</div>
@@ -264,6 +268,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 <div id="s-match" class="screen">
   <!-- Camera preview (behind everything) -->
   <video id="cam-preview" autoplay muted playsinline></video>
+  <video id="import-preview" muted playsinline></video>
 
   <!-- Top HUD -->
   <div class="hud">
@@ -631,6 +636,7 @@ function startTimer() {
   if (_timerInterval) return;
   noteRecordingClockResume();
   M.running = true;
+  resumeImportedVideo();
   _timerInterval = setInterval(() => {
     if (!M.running) return;
     if (M.timerSec > 0) {
@@ -647,6 +653,7 @@ function startTimer() {
 
 function stopTimer() {
   noteRecordingClockPause();
+  pauseImportedVideo();
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   M.running = false;
 }
@@ -700,6 +707,7 @@ async function clickStart() {
   showScreen('s-match');
   document.getElementById('pause-btn').style.display  = 'block';
   document.getElementById('resume-btn').style.display = 'none';
+  attachImportedVideoPreview(true);
   await prepareRecordingBeforeStart();
   runCountdown(() => {
     showScreen('s-match');
@@ -1225,6 +1233,7 @@ let _recBoutStart = 0;      // bout-time offset when recording started
 let _recPerfStart = null;   // performance.now() when recorder started
 let _recPauseOpen = null;   // open clock-pause span while recording
 let _importVideoFile = null;
+let _importVideoUrl = null;
 let _isRenderingOverlay = false;
 
 function pickMime() {
@@ -1268,6 +1277,60 @@ function resetCamUI() {
   _recChunks = [];
   _recPerfStart = null;
   _recPauseOpen = null;
+}
+
+function setImportVideoStatus(msg) {
+  const setupStatus = document.getElementById('setup-video-status');
+  if (setupStatus) setupStatus.textContent = msg || '';
+}
+
+function openVideoPicker() {
+  document.getElementById('video-input').click();
+}
+
+function attachImportedVideoPreview(reset = false) {
+  const preview = document.getElementById('import-preview');
+  if (!preview || !_importVideoFile) return null;
+  if (!_importVideoUrl) _importVideoUrl = URL.createObjectURL(_importVideoFile);
+  if (preview.src !== _importVideoUrl) preview.src = _importVideoUrl;
+  preview.classList.add('on');
+  if (reset) {
+    try { preview.currentTime = 0; } catch (_) {}
+  }
+  return preview;
+}
+
+function pauseImportedVideo() {
+  const preview = document.getElementById('import-preview');
+  if (preview) preview.pause();
+}
+
+function resumeImportedVideo() {
+  if (!_importVideoFile || !M || !M.running) return;
+  const preview = attachImportedVideoPreview(false);
+  if (!preview || document.getElementById('s-match').classList.contains('active') === false) return;
+  const p = preview.play();
+  if (p && typeof p.catch === 'function') p.catch(() => {});
+}
+
+function resetImportedVideo(clearFile = false) {
+  const preview = document.getElementById('import-preview');
+  if (preview) {
+    preview.pause();
+    preview.classList.remove('on');
+    preview.removeAttribute('src');
+    preview.load();
+  }
+  if (_importVideoUrl) {
+    URL.revokeObjectURL(_importVideoUrl);
+    _importVideoUrl = null;
+  }
+  if (clearFile) {
+    _importVideoFile = null;
+    const input = document.getElementById('video-input');
+    if (input) input.value = '';
+    setImportVideoStatus('');
+  }
 }
 
 function stopActiveRecording(opts = {}) {
@@ -1766,9 +1829,11 @@ function overlayFilename(source, ext) {
 function setOverlayStatus(msg, busy) {
   const status = document.getElementById('overlay-status');
   const importBtn = document.getElementById('imp-video');
+  const setupImportBtn = document.getElementById('btn-import-video');
   const exportBtn = document.getElementById('exp-overlay');
   if (status) status.textContent = msg || '';
   if (importBtn) importBtn.disabled = !!busy;
+  if (setupImportBtn) setupImportBtn.disabled = !!busy;
   if (exportBtn) {
     exportBtn.disabled = !!busy;
     exportBtn.textContent = busy ? 'Rendering…' : '⬇ Export Overlay';
@@ -1966,15 +2031,20 @@ document.getElementById('exp-csv').addEventListener('touchend',  e=>{ e.preventD
 document.getElementById('exp-txt').addEventListener('touchend',  e=>{ e.preventDefault(); exportTXT();  },{passive:false});
 document.getElementById('exp-video').addEventListener('touchend',e=>{ e.preventDefault(); exportVideo();},{passive:false});
 document.getElementById('imp-video').addEventListener('touchend', e=>{
-  e.preventDefault(); document.getElementById('video-input').click();
+  e.preventDefault(); openVideoPicker();
+},{passive:false});
+document.getElementById('btn-import-video').addEventListener('touchend', e=>{
+  e.preventDefault(); openVideoPicker();
 },{passive:false});
 document.getElementById('exp-overlay').addEventListener('touchend', e=>{
   e.preventDefault(); exportImportedOverlay();
 },{passive:false});
 document.getElementById('video-input').addEventListener('change', evt => {
   const file = evt.target.files[0]; if (!file) return;
+  resetImportedVideo(false);
   _importVideoFile = file;
   document.getElementById('exp-overlay').style.display = 'inline-block';
+  setImportVideoStatus(`${file.name} ready`);
   setOverlayStatus(`${file.name} ready. Imported video starts at bout 0:00.`, false);
 });
 

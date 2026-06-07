@@ -22,6 +22,7 @@ test.describe('UFL fencing app', () => {
 
     await page.goto(APP_PATH);
     await expect(page.locator('#s-setup.active')).toBeVisible();
+    await expect(page.locator('#btn-import-video')).toBeVisible();
 
     await page.locator('[data-group="wpn"][data-val="epee"]').tap();
     await expect(page.locator('[data-group="wpn"][data-val="epee"]')).toHaveClass(/active/);
