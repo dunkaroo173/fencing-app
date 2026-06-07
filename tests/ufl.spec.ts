@@ -288,6 +288,30 @@ test.describe('overlay video export', () => {
     ]);
   });
 
+  test('freezes match events for overlay rendering even if the live match changes', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const scoreFromSnapshot = await page.evaluate(() => {
+      const liveMatch = M;
+      liveMatch.events = [
+        { ts: 7, period: 1, side: 'R', label: 'Simple Attack', isHit: true, actionId: 200 },
+      ];
+      const snap = (window as any).snapshotMatchForOverlay(liveMatch);
+      liveMatch.events = [];
+
+      const saved = M;
+      try {
+        M = snap;
+        return (window as any).replayStateAt(10).scoreR;
+      } finally {
+        M = saved;
+      }
+    });
+
+    expect(scoreFromSnapshot).toBe(1);
+  });
+
   test('unsupported overlay rendering shows an error without breaking exports', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);

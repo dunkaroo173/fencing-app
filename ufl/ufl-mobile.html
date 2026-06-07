@@ -1892,10 +1892,23 @@ function waitForEvent(target, name) {
   });
 }
 
+function snapshotMatchForOverlay(match) {
+  if (!match) return null;
+  try {
+    return typeof structuredClone === 'function'
+      ? structuredClone(match)
+      : JSON.parse(JSON.stringify(match));
+  } catch (_) {
+    return { ...match, events: (match.events || []).map(ev => ({ ...ev })) };
+  }
+}
+
 async function renderOverlayVideo(file, source, opts) {
   if (!M) throw new Error('No match loaded');
   if (!file) throw new Error('Import a video first');
   if (typeof MediaRecorder === 'undefined') throw new Error('Overlay export is not supported in this browser');
+  const renderMatch = snapshotMatchForOverlay(M);
+  if (!renderMatch) throw new Error('No match loaded');
   const timeOffset = opts && Number(opts.timeOffset) ? Number(opts.timeOffset) : 0;
 
   const video = document.createElement('video');
@@ -1942,8 +1955,14 @@ async function renderOverlayVideo(file, source, opts) {
     const drawFrame = () => {
       if (video.ended || video.paused) return;
       ctx.drawImage(video, 0, 0, dim.width, dim.height);
-      drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
-      drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
+      const liveMatch = M;
+      try {
+        M = renderMatch;
+        drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
+        drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
+      } finally {
+        M = liveMatch;
+      }
       requestAnimationFrame(drawFrame);
     };
 
@@ -1963,7 +1982,7 @@ async function renderOverlayVideo(file, source, opts) {
       blob,
       filename: overlayFilename(source, ext),
       mimeType: type,
-      matchId: M.matchId || null,
+      matchId: renderMatch.matchId || null,
       createdAt: Date.now(),
       duration: video.duration || null,
       source,
