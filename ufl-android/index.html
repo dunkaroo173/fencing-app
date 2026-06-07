@@ -588,6 +588,7 @@ function newMatchState(cfg) {
     recordingStartBoutTs: null,
     recordingStartPeriod: null,
     recordingStartPeriodTs: null,
+    recordingPauses: [],
     startTime: null,
     elapsedMs: 0,
   };
@@ -628,6 +629,7 @@ let _timerInterval = null;
 
 function startTimer() {
   if (_timerInterval) return;
+  noteRecordingClockResume();
   M.running = true;
   _timerInterval = setInterval(() => {
     if (!M.running) return;
@@ -644,6 +646,7 @@ function startTimer() {
 }
 
 function stopTimer() {
+  noteRecordingClockPause();
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   M.running = false;
 }
@@ -989,7 +992,7 @@ function _radConfirmSector(){
   let actionId;
   if(sec.actionId!==undefined){actionId=sec.actionId;}
   else{const base=side==='L'?100:200; actionId=base+sec.offset;}
-  setTimeout(()=>{closePie(side); showConfirm(side,actionId);},130);
+  setTimeout(()=>{closePie(side, false); showConfirm(side,actionId);},130);
 }
 
 function _radPtrDown(e){
@@ -1033,7 +1036,7 @@ function openPie(side){
   _radTransitionTo('MAIN',false);
 }
 
-function closePie(side){
+function closePie(side, resume = true){
   _radPhase='idle'; _radHov=null; _radStack=[]; _radMenu=null; _radSide=null; _radEls=[];
   const ov=document.getElementById('radial-overlay');
   ov.style.opacity='0';
@@ -1041,7 +1044,7 @@ function closePie(side){
     ov.style.display='none';
     while(_rSlicesG.firstChild)_rSlicesG.removeChild(_rSlicesG.firstChild);
   },220);
-  if(M&&!M.finished)startTimer();
+  if(resume&&M&&!M.finished)startTimer();
 }
 
 (function initRadial(){
@@ -1219,6 +1222,8 @@ let _rafId        = null;   // requestAnimationFrame handle
 let _lastAction   = null;   // {emoji,label,side} — shown on canvas for 3 s
 let _lastActionAt = 0;      // performance.now() timestamp
 let _recBoutStart = 0;      // bout-time offset when recording started
+let _recPerfStart = null;   // performance.now() when recorder started
+let _recPauseOpen = null;   // open clock-pause span while recording
 let _importVideoFile = null;
 let _isRenderingOverlay = false;
 
@@ -1261,9 +1266,17 @@ function resetCamUI() {
   _camStream = null;
   _mediaRec  = null;
   _recChunks = [];
+  _recPerfStart = null;
+  _recPauseOpen = null;
 }
 
 function stopActiveRecording(opts = {}) {
+  if (_recPauseOpen && M && Array.isArray(M.recordingPauses)) {
+    _recPauseOpen.endVideo = recordingVideoElapsed();
+    M.recordingPauses.push(_recPauseOpen);
+    _recPauseOpen = null;
+    if (typeof scheduleSave === 'function') scheduleSave();
+  }
   if (_camState !== 'recording') return false;
   _autoStop = !!opts.autoStop;
   _camState = 'stopping';
@@ -1286,6 +1299,32 @@ function stopActiveRecording(opts = {}) {
 
   if (_camStream) _camStream.getTracks().forEach(t => t.stop());
   return true;
+}
+
+function recordingVideoElapsed() {
+  return _recPerfStart === null ? 0 : Math.max(0, (performance.now() - _recPerfStart) / 1000);
+}
+
+function ensureRecordingPauses() {
+  if (!M) return [];
+  if (!Array.isArray(M.recordingPauses)) M.recordingPauses = [];
+  return M.recordingPauses;
+}
+
+function noteRecordingClockPause() {
+  if (!M || _camState !== 'recording' || !M.running || _recPauseOpen) return;
+  _recPauseOpen = {
+    startVideo: recordingVideoElapsed(),
+    boutTime: currentBoutElapsed(),
+  };
+}
+
+function noteRecordingClockResume() {
+  if (!_recPauseOpen || !M) return;
+  _recPauseOpen.endVideo = recordingVideoElapsed();
+  ensureRecordingPauses().push(_recPauseOpen);
+  _recPauseOpen = null;
+  if (typeof scheduleSave === 'function') scheduleSave();
 }
 
 function rrect(ctx, x, y, w, h, r) {
@@ -1479,12 +1518,38 @@ function currentBoutElapsed() {
          ((Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0));
 }
 
+function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
+  const t = Number(videoTime) || 0;
+  let boutTime = t + (Number(timeOffset) || 0);
+  if (!useRecordingPauses || !M || !Array.isArray(M.recordingPauses)) return boutTime;
+
+  const pauses = M.recordingPauses
+    .map(p => ({
+      startVideo: Number(p.startVideo),
+      endVideo: Number(p.endVideo),
+      boutTime: Number(p.boutTime),
+    }))
+    .filter(p => Number.isFinite(p.startVideo))
+    .sort((a, b) => a.startVideo - b.startVideo);
+
+  for (const p of pauses) {
+    if (t <= p.startVideo) break;
+    const end = Number.isFinite(p.endVideo) ? p.endVideo : t;
+    if (t < end) return Number.isFinite(p.boutTime) ? p.boutTime : boutTime;
+    boutTime -= Math.max(0, end - p.startVideo);
+  }
+  return boutTime;
+}
+
 function markRecordingStart(boutElapsed) {
   _recBoutStart = Number.isFinite(Number(boutElapsed)) ? Number(boutElapsed) : currentBoutElapsed();
+  _recPerfStart = performance.now();
+  _recPauseOpen = null;
   if (M) {
     M.recordingStartBoutTs = _recBoutStart;
     M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
     M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
+    M.recordingPauses = [];
     if (typeof scheduleSave === 'function') scheduleSave();
   }
   return _recBoutStart;
@@ -1502,9 +1567,9 @@ async function prepareRecordingBeforeStart() {
   }
 }
 
-function drawImportedOverlay(ctx, W, H, currentTime, timeOffset) {
+function drawImportedOverlay(ctx, W, H, currentTime, timeOffset, useRecordingPauses) {
   if (!M || !M.events) return;
-  const boutTime = currentTime + (Number(timeOffset) || 0);
+  const boutTime = videoTimeToBoutTime(currentTime, timeOffset, useRecordingPauses);
   const visible = M.events
     .map(ev => ({ ev, t: overlayEventTime(ev) }))
     .filter(x => boutTime >= x.t && boutTime < x.t + 3)
@@ -1547,9 +1612,9 @@ function replayStateAt(boutTime, events) {
   return state;
 }
 
-function drawReplayHUDOverlay(ctx, W, H, currentTime, timeOffset) {
+function drawReplayHUDOverlay(ctx, W, H, currentTime, timeOffset, useRecordingPauses) {
   if (!M) return;
-  const state = replayStateAt(currentTime + (Number(timeOffset) || 0));
+  const state = replayStateAt(videoTimeToBoutTime(currentTime, timeOffset, useRecordingPauses));
   const saved = M;
   try {
     M = { ...M, ...state };
@@ -1736,6 +1801,7 @@ async function renderOverlayVideo(file, source, opts) {
   const renderMatch = snapshotMatchForOverlay(M);
   if (!renderMatch) throw new Error('No match loaded');
   const timeOffset = opts && Number(opts.timeOffset) ? Number(opts.timeOffset) : 0;
+  const useRecordingPauses = !!(opts && opts.useRecordingPauses);
 
   const video = document.createElement('video');
   const url = URL.createObjectURL(file);
@@ -1786,8 +1852,8 @@ async function renderOverlayVideo(file, source, opts) {
       const liveMatch = M;
       try {
         M = renderMatch;
-        drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
-        drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset);
+        drawReplayHUDOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset, useRecordingPauses);
+        drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime, timeOffset, useRecordingPauses);
       } finally {
         M = liveMatch;
       }
@@ -1855,7 +1921,7 @@ function exportVideo() {
   const start = M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined
     ? Number(M.recordingStartBoutTs)
     : _recBoutStart;
-  exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: start });
+  exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: start, useRecordingPauses: true });
 }
 
 async function exportRenderedOverlay(file, source, opts) {

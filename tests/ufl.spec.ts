@@ -299,6 +299,30 @@ test.describe('overlay video export', () => {
     expect(stopped).toEqual({ recorder: true, track: true, camState: 'stopping' });
   });
 
+  test('maps recorded video time through clock pauses for overlay export', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const mapped = await page.evaluate(() => {
+      M.recordingPauses = [
+        { startVideo: 5, endVideo: 10, boutTime: 5 },
+      ];
+      return {
+        beforePause: (window as any).videoTimeToBoutTime(4, 0, true),
+        duringPause: (window as any).videoTimeToBoutTime(7, 0, true),
+        afterPause: (window as any).videoTimeToBoutTime(12, 0, true),
+        importedPath: (window as any).videoTimeToBoutTime(12, 0, false),
+      };
+    });
+
+    expect(mapped).toEqual({
+      beforePause: 4,
+      duringPause: 5,
+      afterPause: 7,
+      importedPath: 12,
+    });
+  });
+
   test('replays scoreboard state from event timestamps for video export', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
