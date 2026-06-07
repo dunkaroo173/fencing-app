@@ -439,7 +439,12 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
           <button class="exp-btn" id="exp-json">⬇ Export JSON</button>
           <button class="exp-btn" id="exp-csv">⬇ Export CSV</button>
           <button class="exp-btn" id="exp-txt">⬇ Export TXT</button>
+          <button class="exp-btn" id="exp-video" style="display:none">⬇ Export Video</button>
+          <button class="exp-btn" id="imp-video">⬆ Import Video</button>
+          <button class="exp-btn" id="exp-overlay" style="display:none">⬇ Export Overlay</button>
         </div>
+        <div id="overlay-status" style="font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:8px"></div>
+        <input type="file" id="video-input" accept="video/*" style="display:none">
       </div>
     </div>
     <!-- AI panel -->
@@ -652,6 +657,11 @@ function endPeriod() {
 
 function finishMatch() {
   stopTimer();
+  if (_camState === 'recording') {
+    _autoStop = true;
+    if (_mediaRec) _mediaRec.stop();
+    if (_camStream) _camStream.getTracks().forEach(t => t.stop());
+  }
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
@@ -1196,11 +1206,15 @@ let _mediaRec     = null;
 let _recChunks    = [];
 let _camState     = 'idle'; // idle | preview | recording
 let _mimeType     = '';
+let _recBlob      = null;   // retained blob for post-match video export
+let _autoStop     = false;  // true when finishMatch() triggers stop
 let _recCanvas    = null;   // offscreen canvas for overlay compositing
 let _recCtx       = null;
 let _rafId        = null;   // requestAnimationFrame handle
 let _lastAction   = null;   // {emoji,label,side} — shown on canvas for 3 s
 let _lastActionAt = 0;      // performance.now() timestamp
+let _importVideoFile = null;
+let _isRenderingOverlay = false;
 
 function pickMime() {
   const candidates = [
@@ -1358,6 +1372,52 @@ function drawHUDOverlay(ctx, W, H) {
   }
 }
 
+function drawActionPill(ctx, W, H, ev, alpha) {
+  if (!ev) return;
+  const fSize = Math.max(18, Math.round(H * 0.033));
+  const txt = ev.emoji + '  ' + ev.label + (ev.isHit ? '' : '  [OFF TARGET]');
+  ctx.save();
+  ctx.font = `bold ${fSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(txt).width;
+  const pw = Math.min(W - 28, tw + 44);
+  const ph = fSize * 2.2;
+  const py = H * 0.82;
+
+  ctx.globalAlpha = alpha * 0.88;
+  ctx.fillStyle = '#07080c';
+  rrect(ctx, W / 2 - pw / 2, py - ph / 2, pw, ph, ph / 2);
+  ctx.fill();
+
+  const sideCol = ev.side === 'L' ? '#00c7ff' : ev.side === 'R' ? '#e62600' : '#f5c842';
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = sideCol;
+  rrect(ctx, W / 2 - pw / 2, py - ph / 2, 5, ph, 3);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff';
+  ctx.fillText(txt, W / 2, py, pw - 30);
+  ctx.restore();
+}
+
+function overlayEventTime(ev) {
+  const period = Math.max(1, Number(ev.period) || 1);
+  return (period - 1) * (Number(M.periodDuration) || 0) + (Number(ev.ts) || 0);
+}
+
+function drawImportedOverlay(ctx, W, H, currentTime) {
+  if (!M || !M.events) return;
+  const visible = M.events
+    .map(ev => ({ ev, t: overlayEventTime(ev) }))
+    .filter(x => currentTime >= x.t && currentTime < x.t + 3)
+    .pop();
+  if (!visible) return;
+  const elapsed = currentTime - visible.t;
+  const alpha = elapsed < 2.4 ? 1 : Math.max(0, 1 - (elapsed - 2.4) / 0.6);
+  drawActionPill(ctx, W, H, visible.ev, alpha);
+}
+
 async function toggleCamera() {
   const btn     = document.getElementById('cam-btn');
   const preview = document.getElementById('cam-preview');
@@ -1441,21 +1501,17 @@ async function toggleCamera() {
   // ── RECORDING → STOP + SAVE ─────────────────────────────────────────────────
   if (_camState === 'recording') {
     _mediaRec.onstop = () => {
-      if (_recChunks.length === 0) { showCamError('No data recorded'); return; }
+      if (_recChunks.length === 0) { showCamError('No data recorded'); resetCamUI(); return; }
       const mime = _mimeType || 'video/webm';
-      const blob = new Blob(_recChunks, { type: mime });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `match-${Date.now()}.${camExt()}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      _recBlob = new Blob(_recChunks, { type: mime });
+      if (!_autoStop) {
+        shareOrDownload(_recBlob, overlayFilename('recorded', camExt()));
+      }
+      _autoStop = false;
+      resetCamUI();
     };
     _mediaRec.stop();
     _camStream.getTracks().forEach(t => t.stop());
-    resetCamUI();
   }
 }
 
@@ -1464,12 +1520,148 @@ document.getElementById('cam-btn').addEventListener('touchend', e => {
 }, {passive:false});
 
 // ── Exports ───────────────────────────────────────────────────────────────────
+function safeFilePart(s) {
+  return String(s || 'match').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'match';
+}
+
+function _downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function shareOrDownload(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    try { await navigator.share({ files: [file], title: filename }); return; }
+    catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  _downloadBlob(blob, filename);
+}
+
+function overlayFilename(source, ext) {
+  return `match-${safeFilePart(M.nameL)}-vs-${safeFilePart(M.nameR)}-${source}-${Date.now()}.${ext}`;
+}
+
+function setOverlayStatus(msg, busy) {
+  const status = document.getElementById('overlay-status');
+  const importBtn = document.getElementById('imp-video');
+  const exportBtn = document.getElementById('exp-overlay');
+  if (status) status.textContent = msg || '';
+  if (importBtn) importBtn.disabled = !!busy;
+  if (exportBtn) {
+    exportBtn.disabled = !!busy;
+    exportBtn.textContent = busy ? 'Rendering…' : '⬇ Export Overlay';
+  }
+}
+
+function videoDimensions(video) {
+  const srcW = video.videoWidth || 1280;
+  const srcH = video.videoHeight || 720;
+  const maxEdge = 1280;
+  const scale = Math.min(1, maxEdge / Math.max(srcW, srcH));
+  return {
+    width: Math.max(2, Math.round(srcW * scale)),
+    height: Math.max(2, Math.round(srcH * scale)),
+  };
+}
+
+function waitForEvent(target, name) {
+  return new Promise((resolve, reject) => {
+    target.addEventListener(name, resolve, { once: true });
+    target.addEventListener('error', () => reject(new Error('Could not read the imported video')), { once: true });
+  });
+}
+
+async function renderOverlayVideo(file, source) {
+  if (!M) throw new Error('No match loaded');
+  if (!file) throw new Error('Import a video first');
+  if (typeof MediaRecorder === 'undefined') throw new Error('Overlay export is not supported in this browser');
+
+  const video = document.createElement('video');
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.muted = true;
+  video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none';
+  document.body.appendChild(video);
+
+  try {
+    await waitForEvent(video, 'loadedmetadata');
+    const dim = videoDimensions(video);
+    const canvas = document.createElement('canvas');
+    canvas.width = dim.width;
+    canvas.height = dim.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !canvas.captureStream) throw new Error('Canvas video capture is not supported in this browser');
+
+    const stream = canvas.captureStream(30);
+    const videoCapture = video.captureStream ? video.captureStream() :
+                         video.mozCaptureStream ? video.mozCaptureStream() : null;
+    let audioPreserved = false;
+    if (videoCapture) {
+      videoCapture.getAudioTracks().forEach(track => {
+        stream.addTrack(track);
+        audioPreserved = true;
+      });
+    }
+
+    const mimeType = pickMime();
+    const chunks = [];
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    const stopped = new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = () => reject(new Error('Overlay recording failed'));
+    });
+
+    const drawFrame = () => {
+      if (video.ended || video.paused) return;
+      ctx.drawImage(video, 0, 0, dim.width, dim.height);
+      drawImportedOverlay(ctx, dim.width, dim.height, video.currentTime);
+      requestAnimationFrame(drawFrame);
+    };
+
+    recorder.start(1000);
+    await video.play();
+    drawFrame();
+    await waitForEvent(video, 'ended');
+    recorder.stop();
+    await stopped;
+
+    const type = recorder.mimeType || mimeType || 'video/webm';
+    const blob = new Blob(chunks, { type });
+    if (!blob.size) throw new Error('No overlay video data was produced');
+    const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm';
+    if (!audioPreserved) setOverlayStatus('Overlay rendered. Source audio could not be preserved on this browser.', false);
+    return {
+      blob,
+      filename: overlayFilename(source, ext),
+      mimeType: type,
+      matchId: M.matchId || null,
+      createdAt: Date.now(),
+      duration: video.duration || null,
+      source,
+    };
+  } finally {
+    video.pause();
+    document.body.removeChild(video);
+    URL.revokeObjectURL(url);
+  }
+}
+
 function exportJSON() {
   const blob = new Blob([JSON.stringify(M, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.json`;
-  a.click();
+  shareOrDownload(blob, overlayFilename('events', 'json'));
 }
 
 function exportCSV() {
@@ -1478,10 +1670,7 @@ function exportCSV() {
     rows.push([ev.ts,ev.side,ev.actionId,`"${ev.label}"`,ev.isHit,ev.period].join(','));
   });
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.csv`;
-  a.click();
+  shareOrDownload(blob, overlayFilename('events', 'csv'));
 }
 
 function exportTXT() {
@@ -1492,19 +1681,59 @@ function exportTXT() {
     txt += `[${fmtTime(ev.ts)}] P${ev.period}  ${ev.emoji} ${ev.side === 'L' ? M.nameL : ev.side === 'R' ? M.nameR : 'REF'}: ${ev.label}\n`;
   });
   const blob = new Blob([txt], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `match-${M.nameL}-vs-${M.nameR}-${Date.now()}.txt`;
-  a.click();
+  shareOrDownload(blob, overlayFilename('report', 'txt'));
+}
+
+function exportVideo() {
+  if (!_recBlob) return;
+  shareOrDownload(_recBlob, overlayFilename('recorded', camExt()));
+}
+
+async function exportImportedOverlay() {
+  if (_isRenderingOverlay) return;
+  _isRenderingOverlay = true;
+  setOverlayStatus('Rendering overlay video. Keep this screen open.', true);
+  try {
+    const rendered = await renderOverlayVideo(_importVideoFile, 'imported');
+    if (document.getElementById('overlay-status').textContent === 'Rendering overlay video. Keep this screen open.') {
+      setOverlayStatus('Overlay rendered.', false);
+    }
+    await shareOrDownload(rendered.blob, rendered.filename);
+  } catch (err) {
+    setOverlayStatus(err && err.message ? err.message : 'Overlay export failed', false);
+  } finally {
+    _isRenderingOverlay = false;
+    const status = document.getElementById('overlay-status');
+    if (status && status.textContent === 'Rendering overlay video. Keep this screen open.') {
+      setOverlayStatus('', false);
+    } else {
+      setOverlayStatus(status ? status.textContent : '', false);
+    }
+  }
 }
 
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
 document.getElementById('exp-csv').addEventListener('touchend',  e=>{ e.preventDefault(); exportCSV();  },{passive:false});
 document.getElementById('exp-txt').addEventListener('touchend',  e=>{ e.preventDefault(); exportTXT();  },{passive:false});
+document.getElementById('exp-video').addEventListener('touchend',e=>{ e.preventDefault(); exportVideo();},{passive:false});
+document.getElementById('imp-video').addEventListener('touchend', e=>{
+  e.preventDefault(); document.getElementById('video-input').click();
+},{passive:false});
+document.getElementById('exp-overlay').addEventListener('touchend', e=>{
+  e.preventDefault(); exportImportedOverlay();
+},{passive:false});
+document.getElementById('video-input').addEventListener('change', evt => {
+  const file = evt.target.files[0]; if (!file) return;
+  _importVideoFile = file;
+  document.getElementById('exp-overlay').style.display = 'inline-block';
+  setOverlayStatus(`${file.name} ready. Imported video starts at bout 0:00.`, false);
+});
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
 function openDrawer() {
   buildReport();
+  document.getElementById('exp-video').style.display = _recBlob ? 'inline-block' : 'none';
+  document.getElementById('exp-overlay').style.display = _importVideoFile ? 'inline-block' : 'none';
   document.getElementById('drawer').classList.add('on');
   document.getElementById('drawer-backdrop').classList.add('on');
 }

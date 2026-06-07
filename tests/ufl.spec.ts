@@ -214,3 +214,42 @@ test.describe('UX-1 persistence', () => {
     expect(leftover).toBe(0);
   });
 });
+
+test.describe('overlay video export', () => {
+  test('export drawer exposes imported-video controls', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await page.evaluate(() => (window as any).openDrawer());
+
+    await expect(page.locator('#imp-video')).toBeVisible();
+    await expect(page.locator('#exp-overlay')).toBeHidden();
+    await expect(page.locator('#overlay-status')).toBeVisible();
+  });
+
+  test('maps event timestamps across periods for imported overlay replay', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+
+    const mapped = await page.evaluate(() => (window as any).overlayEventTime({ ts: 12, period: 2 }));
+    expect(mapped).toBe(192);
+  });
+
+  test('unsupported overlay rendering shows an error without breaking exports', async ({ page }) => {
+    await page.goto(APP_PATH);
+    await startMatch(page);
+    await page.evaluate(() => (window as any).openDrawer());
+
+    await page.locator('#video-input').setInputFiles({
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('not a real video'),
+    });
+    await expect(page.locator('#exp-overlay')).toBeVisible();
+    await expect(page.locator('#overlay-status')).toContainText('clip.mp4 ready');
+
+    await page.evaluate(() => { (window as any).MediaRecorder = undefined; });
+    await page.locator('#exp-overlay').tap();
+    await expect(page.locator('#overlay-status')).toContainText('Overlay export is not supported');
+    await expect(page.locator('#exp-json')).toBeEnabled();
+  });
+});
