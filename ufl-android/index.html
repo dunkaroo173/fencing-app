@@ -1239,11 +1239,11 @@ let _isRenderingOverlay = false;
 
 function pickMime() {
   const candidates = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
     'video/mp4;codecs=avc1',
     'video/mp4',
+    'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9,opus',
+    'video/webm',
   ];
   if (typeof MediaRecorder === 'undefined') return '';
   return candidates.find(m => MediaRecorder.isTypeSupported(m)) || '';
@@ -1901,8 +1901,19 @@ async function renderOverlayVideo(file, source, opts) {
     const ctx = canvas.getContext('2d');
     if (!ctx || !canvas.captureStream) throw new Error('Canvas video capture is not supported in this browser');
 
-    const exportFps = 30;
-    const stream = canvas.captureStream(exportFps);
+    let stream = canvas.captureStream(30);
+    let requestCanvasFrame = () => {};
+    try {
+      const controlledStream = canvas.captureStream(0);
+      const controlledTrack = controlledStream.getVideoTracks()[0];
+      if (controlledTrack && typeof controlledTrack.requestFrame === 'function') {
+        stream.getTracks().forEach(track => track.stop());
+        stream = controlledStream;
+        requestCanvasFrame = () => controlledTrack.requestFrame();
+      } else {
+        controlledStream.getTracks().forEach(track => track.stop());
+      }
+    } catch (_) {}
     const videoCapture = video.captureStream ? video.captureStream() :
                          video.mozCaptureStream ? video.mozCaptureStream() : null;
     let audioPreserved = false;
@@ -1915,9 +1926,15 @@ async function renderOverlayVideo(file, source, opts) {
 
     const mimeType = pickMime();
     const chunks = [];
-    const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+    let recorder;
+    const recorderOpts = { videoBitsPerSecond: 8000000, audioBitsPerSecond: 128000 };
+    try {
+      recorder = new MediaRecorder(stream, mimeType ? { ...recorderOpts, mimeType } : recorderOpts);
+    } catch (_) {
+      recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+    }
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
 
     const stopped = new Promise((resolve, reject) => {
@@ -1926,6 +1943,7 @@ async function renderOverlayVideo(file, source, opts) {
     });
 
     let drawTimer = null;
+    let videoFrameCallback = null;
     const drawFrame = () => {
       if (video.ended) return;
       ctx.drawImage(video, 0, 0, dim.width, dim.height);
@@ -1937,14 +1955,28 @@ async function renderOverlayVideo(file, source, opts) {
       } finally {
         M = liveMatch;
       }
+      requestCanvasFrame();
     };
 
     recorder.start(1000);
     await video.play();
     drawFrame();
-    drawTimer = setInterval(drawFrame, 1000 / exportFps);
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      const onVideoFrame = () => {
+        drawFrame();
+        if (!video.ended) videoFrameCallback = video.requestVideoFrameCallback(onVideoFrame);
+      };
+      videoFrameCallback = video.requestVideoFrameCallback(onVideoFrame);
+    } else {
+      const onAnimationFrame = () => {
+        drawFrame();
+        if (!video.ended) drawTimer = requestAnimationFrame(onAnimationFrame);
+      };
+      drawTimer = requestAnimationFrame(onAnimationFrame);
+    }
     await waitForEvent(video, 'ended');
-    if (drawTimer) clearInterval(drawTimer);
+    if (videoFrameCallback && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(videoFrameCallback);
+    if (drawTimer) cancelAnimationFrame(drawTimer);
     drawFrame();
     if (typeof recorder.requestData === 'function') recorder.requestData();
     recorder.stop();
