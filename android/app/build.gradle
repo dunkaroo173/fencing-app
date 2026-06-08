@@ -27,3 +27,21 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
 }
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.jetbrains.kotlin') {
+            details.useVersion '1.8.22'
+            details.because 'Keep Kotlin transitive runtime artifacts aligned for AndroidX dependencies.'
+        }
+    }
+}
+
+tasks.register('syncUflAndroidAssets', Copy) {
+    from("$rootDir/../ufl-android")
+    into("$projectDir/src/main/assets/public")
+}
+
+tasks.named('preBuild') {
+    dependsOn(tasks.named('syncUflAndroidAssets'))
+}

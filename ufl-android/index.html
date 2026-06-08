@@ -24,10 +24,12 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--body)}
+body.android-native-preview{background:transparent}
 button{cursor:pointer;border:none;background:none;color:inherit;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 #portrait-overlay{display:none;position:absolute;inset:0;background:#000;z-index:9999;align-items:center;justify-content:center;font-size:16px;letter-spacing:2px;color:#fff;font-family:monospace;pointer-events:none}
 #portrait-overlay.on{display:flex;pointer-events:none}
 .app-root{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
+body.android-native-preview .app-root{background:transparent}
 .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden}
 .screen.active{display:flex}
 
@@ -61,11 +63,12 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 
 /* ── SCREEN 1: MATCH ── */
 #s-match{background:var(--bg)}
+body.android-native-preview #s-match{background:transparent}
 .hud{height:58px;flex-shrink:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;padding:0 10px;gap:6px;clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 100%,0 100%)}
 .hud-av{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .hud-info{flex:1;min-width:0;display:flex;flex-direction:column}
 .hud-name{font-family:var(--head);font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hud-hp{height:5px;background:var(--s2);border-radius:2px;margin-top:3px;overflow:hidden}
+.hud-hp{width:100%;height:5px;background:var(--s2);border-radius:2px;margin-top:3px;overflow:hidden}
 .hud-hp-fill{height:100%;border-radius:2px;transition:width .35s}
 .hud-pts{font-family:var(--head);font-weight:800;font-size:22px;min-width:26px;text-align:center;flex-shrink:0}
 .timer-wrap{display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:0 6px}
@@ -76,6 +79,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 .priority-badge{font-size:9px;background:var(--gold);color:#000;padding:1px 4px;border-radius:2px;font-family:var(--mono);font-weight:bold;display:none;margin-left:4px}
 .priority-badge.on{display:inline}
 .operate{flex:1;position:relative;overflow:hidden}
+body.android-native-preview .operate{background:transparent}
 .cards-strip{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;padding:6px 12px;pointer-events:none;z-index:5}
 .cards-l,.cards-r{display:flex;gap:4px;align-items:center;font-size:18px}
 .cards-r{margin-left:auto;flex-direction:row-reverse}
@@ -188,6 +192,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
 #cam-preview,#import-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.28;z-index:0;display:none;pointer-events:none}
 #cam-preview.on,#import-preview.on{display:block}
 #import-preview{opacity:0.42}
+body.android-native-preview #import-preview{display:none!important}
 .cam-btn{position:absolute;top:8px;right:8px;width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,0.6);border:1.5px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:10;cursor:pointer;transition:transform .1s}
 .cam-btn:active{transform:scale(0.9)}
 .cam-btn.recording{border-color:var(--R);background:rgba(230,38,0,0.3)}
@@ -392,6 +397,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
     <button class="rnd rnd-grey" id="res-simul"  style="min-width:120px">⚖️ SIMULTANEOUS</button>
     <button class="rnd rnd-grey" id="res-events" style="min-width:120px">📋 EVENTS</button>
     <button class="rnd rnd-red"  id="res-end"    style="min-width:120px">⏹ END MATCH</button>
+    <button class="rnd rnd-blue" id="res-new"    style="min-width:120px;display:none">🆕 NEW MATCH</button>
   </div>
 </div>
 
@@ -444,7 +450,7 @@ button{cursor:pointer;border:none;background:none;color:inherit;font-family:inhe
           <button class="exp-btn" id="exp-json">⬇ Export JSON</button>
           <button class="exp-btn" id="exp-csv">⬇ Export CSV</button>
           <button class="exp-btn" id="exp-txt">⬇ Export TXT</button>
-          <button class="exp-btn" id="exp-video" style="display:none">⬇ Export Video</button>
+          <button class="exp-btn" id="exp-video" style="display:none">⬇ Export Overlay Video</button>
           <button class="exp-btn" id="imp-video">⬆ Import Video</button>
           <button class="exp-btn" id="exp-overlay" style="display:none">⬇ Export Overlay</button>
         </div>
@@ -699,6 +705,10 @@ function runCountdown(cb) {
 
 // ── Start / Resume ────────────────────────────────────────────────────────────
 async function clickStart() {
+  if (_videoImportPending) {
+    setImportVideoStatus('Wait for video import to finish before starting.');
+    return;
+  }
   const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
   M = newMatchState({ nameL, nameR, ...CFG });
@@ -709,6 +719,10 @@ async function clickStart() {
   document.getElementById('pause-btn').style.display  = 'block';
   document.getElementById('resume-btn').style.display = 'none';
   attachImportedVideoPreview(true);
+  if (_nativeImportVideo && isAndroidNativeVideoAvailable() && typeof AndroidVideo.seekImportedPreview === 'function') {
+    AndroidVideo.seekImportedPreview(0);
+  }
+  updateImportedVideoModeUI();
   if (!isImportedVideoAnnotationMode()) await prepareRecordingBeforeStart();
   runCountdown(() => {
     showScreen('s-match');
@@ -738,6 +752,8 @@ function showResultScreen(title) {
     `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
     `Cards:${M.cardsR.length}`;
   document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
+  document.getElementById('res-end').style.display    = M.finished ? 'none' : 'block';
+  document.getElementById('res-new').style.display    = M.finished ? 'block' : 'none';
   showScreen('s-result');
 }
 
@@ -779,6 +795,21 @@ document.getElementById('res-end').addEventListener('touchend', e => {
   e.preventDefault();
   stopTimer();
   finishMatch();
+}, {passive:false});
+
+document.getElementById('res-new').addEventListener('touchend', e => {
+  e.preventDefault();
+  resetCamUI();
+  resetImportedVideo(true);
+  if (isAndroidNativeVideoAvailable() && typeof AndroidVideo.clearImportedPreview === 'function') {
+    AndroidVideo.clearImportedPreview();
+  }
+  _recBlob = null;
+  _recDurationSec = 0;
+  _nativeRecordedVideo = null;
+  M = null;
+  document.getElementById('fab-btn').style.display = 'none';
+  showScreen('s-setup');
 }, {passive:false});
 
 document.getElementById('ev-back').addEventListener('touchend', e => {
@@ -1224,9 +1255,11 @@ let _recChunks    = [];
 let _camState     = 'idle'; // idle | preview | recording | stopping
 let _mimeType     = '';
 let _recBlob      = null;   // retained blob for post-match video export
+let _recDurationSec = 0;    // retained duration for native export fallback
 let _autoStop     = false;  // true when finishMatch() triggers stop
 let _recCanvas    = null;   // offscreen canvas for overlay compositing
 let _recCtx       = null;
+let _recCanvasTrack = null;
 let _rafId        = null;   // requestAnimationFrame handle
 let _lastAction   = null;   // {emoji,label,side} — shown on canvas for 3 s
 let _lastActionAt = 0;      // performance.now() timestamp
@@ -1235,7 +1268,10 @@ let _recPerfStart = null;   // performance.now() when recorder started
 let _recPauseOpen = null;   // open clock-pause span while recording
 let _importVideoFile = null;
 let _importVideoUrl = null;
+let _nativeImportVideo = null;
+let _nativeRecordedVideo = null;
 let _isRenderingOverlay = false;
+let _videoImportPending = false;
 
 function pickMime() {
   const candidates = [
@@ -1262,6 +1298,7 @@ function resetCamUI() {
   if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
   _recCanvas = null;
   _recCtx    = null;
+  _recCanvasTrack = null;
   const btn    = document.getElementById('cam-btn');
   const prev   = document.getElementById('cam-preview');
   const recDot = document.getElementById('rec-dot');
@@ -1283,15 +1320,40 @@ function setImportVideoStatus(msg) {
   if (setupStatus) setupStatus.textContent = msg || '';
 }
 
+function setVideoImportPending(pending) {
+  _videoImportPending = !!pending;
+  const startBtn = document.getElementById('btn-start');
+  if (startBtn) {
+    startBtn.disabled = _videoImportPending;
+    startBtn.textContent = _videoImportPending ? 'PREPARING VIDEO...' : '▶ START MATCH';
+    startBtn.style.opacity = _videoImportPending ? '0.55' : '';
+  }
+}
+
 function openVideoPicker() {
+  if (isAndroidNativeVideoAvailable()) {
+    setVideoImportPending(true);
+    setImportVideoStatus('Preparing selected video...');
+    AndroidVideo.selectVideo();
+    return;
+  }
   document.getElementById('video-input').click();
 }
 
 function attachImportedVideoPreview(reset = false) {
   const preview = document.getElementById('import-preview');
   if (!preview || !_importVideoFile) return null;
-  if (!_importVideoUrl) _importVideoUrl = URL.createObjectURL(_importVideoFile);
-  if (preview.src !== _importVideoUrl) preview.src = _importVideoUrl;
+  if (_nativeImportVideo && isAndroidNativeVideoAvailable()) {
+    preview.pause();
+    preview.classList.remove('on');
+    return preview;
+  }
+  const src = _nativeImportVideo ? (_nativeImportVideo.previewUri || _nativeImportVideo.uri) : (_importVideoUrl || URL.createObjectURL(_importVideoFile));
+  if (!_nativeImportVideo && !_importVideoUrl) _importVideoUrl = src;
+  if (preview.src !== src) {
+    preview.src = src;
+    preview.load();
+  }
   preview.classList.add('on');
   if (reset) {
     try { preview.currentTime = 0; } catch (_) {}
@@ -1300,16 +1362,32 @@ function attachImportedVideoPreview(reset = false) {
 }
 
 function pauseImportedVideo() {
+  if (_nativeImportVideo && isAndroidNativeVideoAvailable() && typeof AndroidVideo.pauseImportedPreview === 'function') {
+    AndroidVideo.pauseImportedPreview();
+    return;
+  }
   const preview = document.getElementById('import-preview');
   if (preview) preview.pause();
 }
 
 function resumeImportedVideo() {
   if (!_importVideoFile || !M || !M.running) return;
+  if (_nativeImportVideo && isAndroidNativeVideoAvailable() && typeof AndroidVideo.playImportedPreview === 'function') {
+    AndroidVideo.playImportedPreview();
+    return;
+  }
   const preview = attachImportedVideoPreview(false);
   if (!preview || document.getElementById('s-match').classList.contains('active') === false) return;
+  preview.muted = true;
+  preview.removeAttribute('controls');
   const p = preview.play();
-  if (p && typeof p.catch === 'function') p.catch(() => {});
+  if (p && typeof p.catch === 'function') p.catch(err => console.log(`[import-video] play failed ${err && err.name ? err.name : err}`));
+  setTimeout(() => {
+    if (_importVideoFile && M && M.running && preview.paused) {
+      const retry = preview.play();
+      if (retry && typeof retry.catch === 'function') retry.catch(err => console.log(`[import-video] play retry failed ${err && err.name ? err.name : err}`));
+    }
+  }, 250);
 }
 
 function resetImportedVideo(clearFile = false) {
@@ -1329,11 +1407,36 @@ function resetImportedVideo(clearFile = false) {
     const input = document.getElementById('video-input');
     if (input) input.value = '';
     setImportVideoStatus('');
+    _nativeImportVideo = null;
+    document.body.classList.remove('android-native-preview');
+    if (isAndroidNativeVideoAvailable() && typeof AndroidVideo.clearImportedPreview === 'function') {
+      AndroidVideo.clearImportedPreview();
+    }
+    updateImportedVideoModeUI();
   }
 }
 
 function isImportedVideoAnnotationMode() {
   return !!_importVideoFile;
+}
+
+function isAndroidNativeVideoAvailable() {
+  return !!(window.AndroidVideo && typeof AndroidVideo.exportOverlay === 'function');
+}
+
+function updateImportedVideoModeUI() {
+  const camBtn = document.getElementById('cam-btn');
+  if (camBtn) camBtn.style.display = isImportedVideoAnnotationMode() ? 'none' : 'flex';
+}
+
+function stopCameraPreviewForImport() {
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+  if (_mediaRec && _mediaRec.state === 'recording') {
+    stopActiveRecording({ autoStop: true });
+    return;
+  }
+  if (_camStream) _camStream.getTracks().forEach(t => t.stop());
+  resetCamUI();
 }
 
 function stopActiveRecording(opts = {}) {
@@ -1621,6 +1724,8 @@ function markRecordingStart(boutElapsed) {
   _recBoutStart = Number.isFinite(Number(boutElapsed)) ? Number(boutElapsed) : currentBoutElapsed();
   _recPerfStart = performance.now();
   _recPauseOpen = null;
+  _recDurationSec = 0;
+  _nativeRecordedVideo = null;
   if (M) {
     M.recordingStartBoutTs = _recBoutStart;
     M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
@@ -1638,9 +1743,35 @@ async function prepareRecordingBeforeStart() {
       await toggleCamera();
       if (_camState === 'recording') markRecordingStart(-START_COUNTDOWN_SECONDS);
     }
-  } catch (_) {
-    // Camera setup is best-effort; the bout should still start if permissions fail.
+  } catch (err) {
+    showCamError(`Camera setup failed: ${err && err.name ? err.name : 'Unavailable'}`);
   }
+}
+
+function waitForVideoReady(video, timeoutMs = 2500) {
+  return new Promise(resolve => {
+    if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+      resolve(true);
+      return;
+    }
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeEventListener('loadedmetadata', onReady);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('playing', onReady);
+      resolve(ok);
+    };
+    const onReady = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) finish(true);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    video.addEventListener('loadedmetadata', onReady);
+    video.addEventListener('canplay', onReady);
+    video.addEventListener('playing', onReady);
+  });
 }
 
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset, useRecordingPauses) {
@@ -1712,14 +1843,17 @@ async function toggleCamera() {
       showCamError('Camera not supported in this browser'); return;
     }
     try {
-      _camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-        audio: true,
-      });
+      const videoConstraints = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      try {
+        _camStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: true });
+      } catch (audioErr) {
+        _camStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+      }
       _mimeType = pickMime();
       preview.srcObject = _camStream;
       // play() is required on some Android WebViews even with autoplay attr
       await preview.play().catch(() => {});
+      await waitForVideoReady(preview);
       preview.classList.add('on');
       btn.textContent = '⏺';
       _camState = 'preview';
@@ -1739,27 +1873,44 @@ async function toggleCamera() {
     if (typeof MediaRecorder === 'undefined') {
       showCamError('Recording not supported — preview only'); return;
     }
+    await waitForVideoReady(preview);
 
-    // Build offscreen canvas that composites camera + HUD overlay
-    _recCanvas = document.createElement('canvas');
-    _recCanvas.width  = 1280;
-    _recCanvas.height = 720;
-    _recCtx = _recCanvas.getContext('2d');
-
-    const drawFrame = () => {
-      if (!_recCtx) return;
-      _recCtx.drawImage(preview, 0, 0, 1280, 720);
-      _rafId = requestAnimationFrame(drawFrame);
-    };
-    drawFrame();
-
-    // Canvas video stream + original audio tracks
     let recStream;
-    try {
-      recStream = _recCanvas.captureStream(30);
-      _camStream.getAudioTracks().forEach(t => recStream.addTrack(t));
-    } catch (_) {
-      recStream = _camStream; // captureStream not supported — fall back
+    if (isAndroidNativeVideoAvailable()) {
+      // Android native export applies the HUD/action overlay later. Recording
+      // the camera stream directly avoids sparse/black canvas captures in WebView.
+      recStream = _camStream;
+      _recCanvasTrack = null;
+    } else {
+      // Build offscreen canvas that composites camera + HUD overlay for web export.
+      _recCanvas = document.createElement('canvas');
+      _recCanvas.width  = 1280;
+      _recCanvas.height = 720;
+      _recCtx = _recCanvas.getContext('2d');
+
+      const drawFrame = () => {
+        if (!_recCtx) return;
+        try {
+          if (preview.videoWidth > 0 && preview.videoHeight > 0) {
+            _recCtx.drawImage(preview, 0, 0, 1280, 720);
+          }
+        } catch (_) {}
+        if (_recCanvasTrack && typeof _recCanvasTrack.requestFrame === 'function') {
+          try { _recCanvasTrack.requestFrame(); } catch (_) {}
+        }
+        _rafId = requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+
+      // Canvas video stream + original audio tracks
+      try {
+        recStream = _recCanvas.captureStream(30);
+        _recCanvasTrack = recStream.getVideoTracks()[0] || null;
+        _camStream.getAudioTracks().forEach(t => recStream.addTrack(t));
+      } catch (_) {
+        recStream = _camStream; // captureStream not supported — fall back
+        _recCanvasTrack = null;
+      }
     }
 
     _recChunks = [];
@@ -1776,6 +1927,7 @@ async function toggleCamera() {
       if (_recChunks.length === 0) { showCamError('No data recorded'); resetCamUI(); return; }
       const mime = _mimeType || 'video/webm';
       _recBlob = new Blob(_recChunks, { type: mime });
+      _recDurationSec = recordingVideoElapsed();
       const shouldExportNow = !_autoStop;
       _autoStop = false;
       resetCamUI();
@@ -1827,6 +1979,49 @@ async function shareOrDownload(blob, filename) {
 
 function overlayFilename(source, ext) {
   return `match-${safeFilePart(M.nameL)}-vs-${safeFilePart(M.nameR)}-${source}-${Date.now()}.${ext}`;
+}
+
+function nativeOverlayPayload(sourceType, sourceUri, opts = {}) {
+  const match = snapshotMatchForOverlay(M);
+  const extless = overlayFilename(sourceType, 'mp4').replace(/\.mp4$/, '');
+  const payload = {
+    sourceType,
+    sourceUri,
+    filenameBase: extless,
+    timeOffset: opts.timeOffset || 0,
+    useRecordingPauses: !!opts.useRecordingPauses,
+    match,
+  };
+  if (Number.isFinite(Number(opts.durationMs)) && Number(opts.durationMs) > 0) {
+    payload.durationMs = Math.round(Number(opts.durationMs));
+  }
+  return payload;
+}
+
+async function blobToNativeSource(blob, filename) {
+  const sessionId = AndroidVideo.beginRecordedVideo(blob.type || 'video/webm', filename);
+  if (!sessionId) throw new Error('Could not start native recording transfer');
+  const chunkSize = 256 * 1024;
+  for (let offset = 0; offset < blob.size; offset += chunkSize) {
+    const chunk = blob.slice(offset, Math.min(blob.size, offset + chunkSize));
+    const base64 = await blobChunkToBase64(chunk);
+    AndroidVideo.appendRecordedVideoChunk(sessionId, base64);
+  }
+  const uri = AndroidVideo.finishRecordedVideo(sessionId);
+  if (!uri) throw new Error('Could not finalize native recording transfer');
+  return uri;
+}
+
+function blobChunkToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read recorded video chunk'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl);
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 function setOverlayStatus(msg, busy) {
@@ -2018,7 +2213,29 @@ function exportVideo() {
   const start = M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined
     ? Number(M.recordingStartBoutTs)
     : _recBoutStart;
+  if (isAndroidNativeVideoAvailable()) {
+    exportRecordedOverlayNative(start);
+    return;
+  }
   exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: start, useRecordingPauses: true });
+}
+
+async function exportRecordedOverlayNative(start) {
+  if (_isRenderingOverlay) return;
+  _isRenderingOverlay = true;
+  setOverlayStatus('Preparing native recorded export.', true);
+  try {
+    const sourceUri = _nativeRecordedVideo || await blobToNativeSource(_recBlob, overlayFilename('recorded-source', 'webm'));
+    _nativeRecordedVideo = sourceUri;
+    AndroidVideo.exportOverlay(JSON.stringify(nativeOverlayPayload('recorded', sourceUri, {
+      timeOffset: start,
+      useRecordingPauses: true,
+      durationMs: Math.round((_recDurationSec || 0) * 1000),
+    })));
+  } catch (err) {
+    _isRenderingOverlay = false;
+    setOverlayStatus(err && err.message ? err.message : 'Native recorded export failed', false);
+  }
 }
 
 async function exportRenderedOverlay(file, source, opts) {
@@ -2045,6 +2262,13 @@ async function exportRenderedOverlay(file, source, opts) {
 }
 
 async function exportImportedOverlay() {
+  if (isAndroidNativeVideoAvailable() && _nativeImportVideo) {
+    if (_isRenderingOverlay) return;
+    _isRenderingOverlay = true;
+    setOverlayStatus('Rendering native overlay video. Keep this screen open.', true);
+    AndroidVideo.exportOverlay(JSON.stringify(nativeOverlayPayload('imported', _nativeImportVideo.uri, { timeOffset: 0 })));
+    return;
+  }
   exportRenderedOverlay(_importVideoFile, 'imported', { timeOffset: 0 });
 }
 
@@ -2063,12 +2287,70 @@ document.getElementById('exp-overlay').addEventListener('touchend', e=>{
 },{passive:false});
 document.getElementById('video-input').addEventListener('change', evt => {
   const file = evt.target.files[0]; if (!file) return;
+  setVideoImportPending(false);
   resetImportedVideo(false);
+  stopCameraPreviewForImport();
   _importVideoFile = file;
+  _nativeImportVideo = null;
+  document.body.classList.remove('android-native-preview');
+  updateImportedVideoModeUI();
   document.getElementById('exp-overlay').style.display = 'inline-block';
   setImportVideoStatus(`${file.name} ready`);
   setOverlayStatus(`${file.name} ready. Imported video starts at bout 0:00.`, false);
 });
+
+window.onAndroidVideoSelected = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  setVideoImportPending(false);
+  resetImportedVideo(false);
+  stopCameraPreviewForImport();
+  _nativeImportVideo = payload;
+  _importVideoFile = { name: payload.displayName || 'Android video', nativeUri: payload.uri };
+  document.body.classList.add('android-native-preview');
+  updateImportedVideoModeUI();
+  document.getElementById('exp-overlay').style.display = 'inline-block';
+  setImportVideoStatus(`${_importVideoFile.name} ready`);
+  setOverlayStatus(`${_importVideoFile.name} ready. Imported video starts at bout 0:00.`, false);
+  attachImportedVideoPreview(true);
+};
+
+window.onAndroidExportProgress = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  const pct = Math.round((Number(payload.progress) || 0) * 100);
+  setOverlayStatus(`${payload.message || 'Rendering native overlay'} ${pct}%`, true);
+};
+
+window.onAndroidExportComplete = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  _isRenderingOverlay = false;
+  if (payload.savedUri) {
+    setOverlayStatus(`Native overlay saved to Movies/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
+    return;
+  }
+  setOverlayStatus('Native overlay rendered.', false);
+  if (payload.uri && isAndroidNativeVideoAvailable() && typeof AndroidVideo.shareExport === 'function') {
+    AndroidVideo.shareExport(payload.uri, payload.displayName || 'overlay.mp4');
+  }
+};
+
+window.onAndroidExportError = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  if (payload.sourceType === 'imported') setVideoImportPending(false);
+  _isRenderingOverlay = false;
+  setOverlayStatus(payload.message || 'Native overlay export failed', false);
+};
+
+window.onAndroidVideoPickCanceled = function() {
+  setVideoImportPending(false);
+  setImportVideoStatus('');
+};
+
+{
+  const preview = document.getElementById('import-preview');
+  if (preview) preview.addEventListener('canplay', () => {
+    if (M && M.running) resumeImportedVideo();
+  });
+}
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
 function openDrawer() {
