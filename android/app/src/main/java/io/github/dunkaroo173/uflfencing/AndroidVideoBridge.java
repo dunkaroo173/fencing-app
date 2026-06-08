@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -21,6 +22,7 @@ import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
 public class AndroidVideoBridge {
+    private static final String TAG = "UFLAndroidVideo";
     private final MainActivity activity;
     private final WebView webView;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -35,6 +37,11 @@ public class AndroidVideoBridge {
     @JavascriptInterface
     public void selectVideo() {
         activity.runOnUiThread(activity::pickVideo);
+    }
+
+    @JavascriptInterface
+    public void debugLog(String message) {
+        Log.i(TAG, message == null ? "" : message);
     }
 
     @JavascriptInterface
@@ -137,6 +144,7 @@ public class AndroidVideoBridge {
     @JavascriptInterface
     public void shareExport(String outputUri, String displayName) {
         try {
+            Log.i(TAG, "shareExport uri=" + outputUri + " displayName=" + displayName);
             Uri uri = Uri.parse(outputUri);
             android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_SEND);
             intent.setType("video/mp4");
@@ -144,6 +152,7 @@ public class AndroidVideoBridge {
             intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
             activity.startActivity(android.content.Intent.createChooser(intent, displayName == null ? "Share overlay video" : displayName));
         } catch (Exception e) {
+            Log.e(TAG, "shareExport failed", e);
             emitError("share", e);
         }
     }
@@ -208,6 +217,7 @@ public class AndroidVideoBridge {
 
     void onNativeRecordingStopped(Uri uri, String displayName, long durationMs) {
         try {
+            Log.i(TAG, "native recording stopped uri=" + uri + " displayName=" + displayName + " durationMs=" + durationMs);
             JSONObject payload = new JSONObject();
             payload.put("sourceType", "recorded");
             payload.put("uri", uri.toString());

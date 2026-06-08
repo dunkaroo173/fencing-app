@@ -7,7 +7,9 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.ViewGroup;
+import android.webkit.ConsoleMessage;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -19,13 +21,16 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import android.widget.FrameLayout;
+import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERM_CODE = 1;
     private static final int PICK_VIDEO_CODE = 2;
+    private static final String TAG = "UFLMainActivity";
     private WebView webView;
     private AndroidVideoBridge videoBridge;
+    private NativeImportPreview nativeImportPreview;
     private PreviewView nativeCameraPreview;
     private NativeCameraRecorder nativeCameraRecorder;
 
@@ -34,17 +39,44 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         FrameLayout root = new FrameLayout(this);
-        nativeCameraPreview = new PreviewView(this);
-        nativeCameraPreview.setVisibility(android.view.View.GONE);
-        nativeCameraPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
-        root.addView(nativeCameraPreview, new FrameLayout.LayoutParams(
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.TRANSPARENT);
-        root.addView(webView, new FrameLayout.LayoutParams(
+        nativeImportPreview = new NativeImportPreview(this);
+        nativeImportPreview.setVisibility(android.view.View.GONE);
+        nativeImportPreview.setAlpha(0.42f);
+        nativeImportPreview.setClickable(false);
+        nativeImportPreview.setFocusable(false);
+        nativeImportPreview.setCallback(new NativeImportPreview.Callback() {
+            @Override
+            public void onEnded() {
+                runOnUiThread(() -> webView.evaluateJavascript("window.onAndroidImportedPreviewEnded&&window.onAndroidImportedPreviewEnded()", null));
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> webView.evaluateJavascript(
+                        "window.onAndroidImportedPreviewError&&window.onAndroidImportedPreviewError(" + JSONObject.quote(message) + ")",
+                        null));
+            }
+        });
+        root.addView(nativeImportPreview, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        nativeCameraPreview = new PreviewView(this);
+        nativeCameraPreview.setVisibility(android.view.View.GONE);
+        nativeCameraPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        nativeCameraPreview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
+        nativeCameraPreview.setAlpha(0.30f);
+        nativeCameraPreview.setClickable(false);
+        nativeCameraPreview.setFocusable(false);
+        root.addView(nativeCameraPreview, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
@@ -84,6 +116,12 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                Log.i(TAG, "console: " + consoleMessage.message());
+                return true;
+            }
+
+            @Override
             public void onPermissionRequest(final PermissionRequest request) {
                 request.grant(request.getResources());
             }
@@ -112,11 +150,36 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, PICK_VIDEO_CODE);
     }
 
-    void setNativePreviewUri(Uri uri) {}
-    void playNativePreview() {}
-    void pauseNativePreview() {}
-    void seekNativePreview(double seconds) {}
-    void clearNativePreview() {}
+    void setNativePreviewUri(Uri uri) {
+        runOnUiThread(() -> {
+            Log.i(TAG, "setNativePreviewUri uri=" + uri);
+            if (nativeCameraRecorder != null) nativeCameraRecorder.clearPreview();
+            nativeImportPreview.setVideoUri(uri);
+            nativeImportPreview.setVisibility(android.view.View.VISIBLE);
+        });
+    }
+
+    void playNativePreview() {
+        runOnUiThread(() -> {
+            if (nativeImportPreview.getVisibility() == android.view.View.VISIBLE) {
+                nativeImportPreview.play();
+            }
+        });
+    }
+
+    void pauseNativePreview() {
+        runOnUiThread(() -> nativeImportPreview.pause());
+    }
+
+    void seekNativePreview(double seconds) {
+        runOnUiThread(() -> nativeImportPreview.seekToMs(Math.max(0, (int) Math.round(seconds * 1000.0))));
+    }
+
+    void clearNativePreview() {
+        runOnUiThread(() -> {
+            nativeImportPreview.clear();
+        });
+    }
 
     void prepareNativeRecording(String matchJson) {
         if (nativeCameraRecorder != null) nativeCameraRecorder.prepare(matchJson);
@@ -171,6 +234,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (nativeImportPreview != null) nativeImportPreview.release();
         if (nativeCameraRecorder != null) nativeCameraRecorder.shutdown();
         if (videoBridge != null) videoBridge.shutdown();
         super.onDestroy();

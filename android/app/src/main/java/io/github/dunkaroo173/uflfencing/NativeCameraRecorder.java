@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.View;
 import androidx.camera.core.CameraEffect;
 import androidx.camera.core.CameraSelector;
@@ -40,6 +41,7 @@ class NativeCameraRecorder {
     }
 
     private static final int TARGET_BITRATE = 6_000_000;
+    private static final String TAG = "UFLNativeCamera";
 
     private final MainActivity activity;
     private final PreviewView previewView;
@@ -62,9 +64,11 @@ class NativeCameraRecorder {
     }
 
     void prepare(String matchJson) {
+        Log.i(TAG, "prepare");
         updateOverlay(matchJson);
         activity.runOnUiThread(() -> previewView.setVisibility(View.VISIBLE));
         if (videoCapture != null) {
+            Log.i(TAG, "prepare already bound");
             callback.onReady();
             return;
         }
@@ -73,17 +77,21 @@ class NativeCameraRecorder {
             try {
                 cameraProvider = future.get();
                 bindUseCases();
+                Log.i(TAG, "prepare ready");
                 callback.onReady();
             } catch (Exception e) {
+                Log.e(TAG, "prepare failed", e);
                 callback.onError(errorMessage(e));
             }
         }, ContextCompat.getMainExecutor(activity));
     }
 
     void start(String filenameBase, String matchJson) {
+        Log.i(TAG, "start");
         updateOverlay(matchJson);
         if (recording != null) return;
         if (videoCapture == null) {
+            Log.w(TAG, "start before ready");
             callback.onError("Native camera is not ready");
             return;
         }
@@ -106,13 +114,15 @@ class NativeCameraRecorder {
                 pending = pending.withAudioEnabled();
             }
             recording = pending.start(cameraExecutor, this::handleRecordEvent);
-            callback.onStarted();
+            Log.i(TAG, "recording started");
         } catch (Exception e) {
+            Log.e(TAG, "start failed", e);
             callback.onError(errorMessage(e));
         }
     }
 
     void stop(String matchJson) {
+        Log.i(TAG, "stop");
         updateOverlay(matchJson);
         Recording active = recording;
         if (active != null) {
@@ -151,6 +161,7 @@ class NativeCameraRecorder {
     }
 
     private void bindUseCases() {
+        Log.i(TAG, "bindUseCases");
         Preview preview = new Preview.Builder().build();
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
@@ -179,13 +190,21 @@ class NativeCameraRecorder {
 
         cameraProvider.unbindAll();
         cameraProvider.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, group);
+        Log.i(TAG, "bindUseCases complete");
     }
 
     private void handleRecordEvent(VideoRecordEvent event) {
+        if (!(event instanceof VideoRecordEvent.Status)) {
+            Log.i(TAG, "record event " + event.getClass().getSimpleName());
+        }
+        if (event instanceof VideoRecordEvent.Start) {
+            callback.onStarted();
+        }
         if (event instanceof VideoRecordEvent.Finalize) {
             VideoRecordEvent.Finalize finalize = (VideoRecordEvent.Finalize) event;
             activity.runOnUiThread(() -> previewView.setVisibility(View.GONE));
             if (finalize.hasError()) {
+                Log.e(TAG, "recording finalized with error " + finalize.getError(), finalize.getCause());
                 callback.onError("Native recording failed: " + finalize.getError());
                 return;
             }

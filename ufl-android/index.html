@@ -80,6 +80,30 @@ body.android-native-preview #s-match{background:transparent}
 .priority-badge.on{display:inline}
 .operate{flex:1;position:relative;overflow:hidden}
 body.android-native-preview .operate{background:transparent}
+body.android-native-preview .operate::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,0.46);z-index:1;pointer-events:none}
+body.android-native-preview .hud{background:rgba(0,0,0,0.96);box-shadow:0 8px 30px rgba(0,0,0,0.75)}
+body.android-native-preview .cards-strip,
+body.android-native-preview .hint-pill,
+body.android-native-preview .act-btn,
+body.android-native-preview .sec-btn,
+body.android-native-preview .mid-btn,
+body.android-native-preview .confirm-wrap,
+body.android-native-preview #radial-overlay{z-index:12}
+body.android-native-preview .act-left{background:rgba(0,84,105,0.98);box-shadow:0 14px 34px rgba(0,0,0,0.80),0 0 0 4px rgba(0,199,255,0.78)}
+body.android-native-preview .act-right{background:rgba(112,25,10,0.98);box-shadow:0 14px 34px rgba(0,0,0,0.80),0 0 0 4px rgba(230,38,0,0.78)}
+body.android-native-preview .sec-btn{background:rgba(0,0,0,0.96);box-shadow:0 12px 26px rgba(0,0,0,0.78),0 0 0 2px rgba(255,255,255,0.20)}
+body.android-native-preview #pause-btn{background:rgba(70,12,3,0.98);box-shadow:0 12px 28px rgba(0,0,0,0.82),0 0 0 2px rgba(230,38,0,0.55)}
+body.android-native-preview .confirm-wrap{background:rgba(0,0,0,0.84);border:1px solid rgba(255,255,255,0.18);border-radius:14px;padding:12px;box-shadow:0 18px 42px rgba(0,0,0,0.86)}
+body.android-native-preview .mark-circle{background:rgba(0,0,0,0.94);border-color:rgba(255,255,255,0.34);box-shadow:0 8px 20px rgba(0,0,0,0.78)}
+body.android-native-preview .conf-btn{border:2px solid rgba(255,255,255,0.22);box-shadow:0 9px 22px rgba(0,0,0,0.68);color:#fff;text-shadow:0 2px 7px #000}
+body.android-native-preview .conf-hit{background:#0e853f}
+body.android-native-preview .conf-offtarget{background:#a95a00}
+body.android-native-preview .conf-confirm{background:#063fd7}
+body.android-native-preview .conf-cancel{background:#050505;border-color:rgba(255,255,255,0.24)}
+body.android-native-preview .conf-label{color:#fff;text-shadow:0 2px 8px #000;font-weight:700}
+body.android-native-preview .hud-name,
+body.android-native-preview .hud-pts,
+body.android-native-preview .timer-num{text-shadow:0 2px 8px #000}
 .cards-strip{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;padding:6px 12px;pointer-events:none;z-index:5}
 .cards-l,.cards-r{display:flex;gap:4px;align-items:center;font-size:18px}
 .cards-r{margin-left:auto;flex-direction:row-reverse}
@@ -1273,6 +1297,7 @@ let _nativeRecordedVideo = null;
 let _nativeRecordedPayload = null;
 let _nativeRecordingReady = false;
 let _nativeRecordingActive = false;
+let _nativePendingRecordingStartBoutElapsed = null;
 let _nativeOverlayTimer = null;
 let _nativeRecordingReadyPromise = null;
 let _nativeRecordingReadyResolver = null;
@@ -1322,6 +1347,7 @@ function resetCamUI() {
   _recPauseOpen = null;
   _nativeRecordingReady = false;
   _nativeRecordingActive = false;
+  _nativePendingRecordingStartBoutElapsed = null;
   _nativeRecordingReadyPromise = null;
   _nativeRecordingReadyResolver = null;
   document.body.classList.remove('android-native-preview');
@@ -1444,6 +1470,13 @@ function isAndroidNativeRecordingAvailable() {
             typeof AndroidVideo.prepareNativeRecording === 'function' &&
             typeof AndroidVideo.startNativeRecording === 'function' &&
             typeof AndroidVideo.stopNativeRecording === 'function');
+}
+
+function androidDebugLog(msg) {
+  try {
+    if (window.AndroidVideo && typeof AndroidVideo.debugLog === 'function') AndroidVideo.debugLog(msg);
+  } catch (_) {}
+  try { console.log(msg); } catch (_) {}
 }
 
 function nativeRecordingMatchJson() {
@@ -1771,7 +1804,9 @@ function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
 }
 
 function markRecordingStart(boutElapsed) {
-  _recBoutStart = Number.isFinite(Number(boutElapsed)) ? Number(boutElapsed) : currentBoutElapsed();
+  _recBoutStart = boutElapsed !== null && boutElapsed !== undefined && Number.isFinite(Number(boutElapsed))
+    ? Number(boutElapsed)
+    : currentBoutElapsed();
   _recPerfStart = performance.now();
   _recPauseOpen = null;
   _recDurationSec = 0;
@@ -1791,8 +1826,10 @@ async function prepareRecordingBeforeStart() {
   try {
     if (_camState === 'idle') await toggleCamera();
     if (_camState === 'preview') {
+      if (isAndroidNativeRecordingAvailable()) {
+        _nativePendingRecordingStartBoutElapsed = -START_COUNTDOWN_SECONDS;
+      }
       await toggleCamera();
-      if (_camState === 'recording') markRecordingStart(-START_COUNTDOWN_SECONDS);
     }
   } catch (err) {
     showCamError(`Camera setup failed: ${err && err.name ? err.name : 'Unavailable'}`);
@@ -1887,10 +1924,12 @@ async function toggleCamera() {
   const btn     = document.getElementById('cam-btn');
   const preview = document.getElementById('cam-preview');
   const recDot  = document.getElementById('rec-dot');
+  androidDebugLog(`[camera] toggle state=${_camState} native=${isAndroidNativeRecordingAvailable()} bridge=${!!window.AndroidVideo}`);
 
   // ── IDLE → PREVIEW ──────────────────────────────────────────────────────────
   if (_camState === 'idle') {
     if (isAndroidNativeRecordingAvailable()) {
+      androidDebugLog('[camera] native prepare path');
       try {
         _nativeRecordingReady = false;
         _nativeRecordedPayload = null;
@@ -1902,7 +1941,14 @@ async function toggleCamera() {
         AndroidVideo.prepareNativeRecording(nativeRecordingMatchJson());
         btn.textContent = '⏺';
         _camState = 'preview';
-        await _nativeRecordingReadyPromise;
+        const ready = await _nativeRecordingReadyPromise;
+        if (!ready) {
+          document.body.classList.remove('android-native-preview');
+          if (typeof AndroidVideo.clearNativeRecordingPreview === 'function') AndroidVideo.clearNativeRecordingPreview();
+          _camState = 'idle';
+          btn.textContent = '📷';
+          showCamError('Native camera did not start');
+        }
       } catch (err) {
         document.body.classList.remove('android-native-preview');
         showCamError(err && err.message ? err.message : 'Native camera unavailable');
@@ -1942,17 +1988,19 @@ async function toggleCamera() {
   // ── PREVIEW → RECORDING ─────────────────────────────────────────────────────
   if (_camState === 'preview') {
     if (isAndroidNativeRecordingAvailable()) {
+      androidDebugLog(`[camera] native start path ready=${_nativeRecordingReady}`);
       try {
         if (!_nativeRecordingReady) {
           showCamError('Camera is still preparing');
           return;
         }
-        markRecordingStart();
+        if (_nativePendingRecordingStartBoutElapsed === null) {
+          _nativePendingRecordingStartBoutElapsed = currentBoutElapsed();
+        }
         const filenameBase = overlayFilename('recorded-native', 'mp4').replace(/\.mp4$/, '');
         AndroidVideo.startNativeRecording(filenameBase, nativeRecordingMatchJson());
         _recBlob = null;
         _nativeRecordingActive = true;
-        startNativeOverlayTimer();
         recDot.classList.add('on');
         btn.classList.add('recording');
         btn.textContent = '⏹';
@@ -1964,8 +2012,10 @@ async function toggleCamera() {
       return;
     }
     if (typeof MediaRecorder === 'undefined') {
+      androidDebugLog('[camera] web recorder unsupported');
       showCamError('Recording not supported — preview only'); return;
     }
+    androidDebugLog('[camera] web mediarecorder path');
     await waitForVideoReady(preview);
 
     let recStream;
@@ -2304,7 +2354,7 @@ function exportTXT() {
 function exportVideo() {
   if (_nativeRecordedPayload && _nativeRecordedPayload.overlaid) {
     setOverlayStatus(`Overlay video saved as ${_nativeRecordedPayload.displayName || 'recording.mp4'}.`, false);
-    if (_nativeRecordedPayload.uri && isAndroidNativeVideoAvailable() && typeof AndroidVideo.shareExport === 'function') {
+    if (_nativeRecordedPayload.uri && window.AndroidVideo && typeof AndroidVideo.shareExport === 'function') {
       AndroidVideo.shareExport(_nativeRecordedPayload.uri, _nativeRecordedPayload.displayName || 'recording.mp4');
     }
     return;
@@ -2428,7 +2478,7 @@ window.onAndroidExportComplete = function(payloadJson) {
     return;
   }
   setOverlayStatus('Native overlay rendered.', false);
-  if (payload.uri && isAndroidNativeVideoAvailable() && typeof AndroidVideo.shareExport === 'function') {
+  if (payload.uri && window.AndroidVideo && typeof AndroidVideo.shareExport === 'function') {
     AndroidVideo.shareExport(payload.uri, payload.displayName || 'overlay.mp4');
   }
 };
@@ -2449,12 +2499,16 @@ window.onAndroidRecordingReady = function() {
 
 window.onAndroidRecordingStarted = function() {
   _nativeRecordingActive = true;
+  markRecordingStart(_nativePendingRecordingStartBoutElapsed);
+  _nativePendingRecordingStartBoutElapsed = null;
+  startNativeOverlayTimer();
   syncNativeRecordingOverlay();
 };
 
 window.onAndroidRecordingStopped = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   _nativeRecordingActive = false;
+  _nativePendingRecordingStartBoutElapsed = null;
   stopNativeOverlayTimer();
   _nativeRecordedPayload = payload;
   _nativeRecordedVideo = payload.uri || payload.savedUri || null;
@@ -2471,6 +2525,7 @@ window.onAndroidRecordingError = function(payloadJson) {
   if (_nativeRecordingReadyResolver) _nativeRecordingReadyResolver(false);
   _nativeRecordingReadyResolver = null;
   _nativeRecordingActive = false;
+  _nativePendingRecordingStartBoutElapsed = null;
   stopNativeOverlayTimer();
   resetCamUI();
   setOverlayStatus(payload.message || 'Native recording failed', false);
@@ -2481,10 +2536,27 @@ window.onAndroidVideoPickCanceled = function() {
   setImportVideoStatus('');
 };
 
+window.onAndroidImportedPreviewEnded = function() {
+  if (isImportedVideoAnnotationMode() && M && M.running) {
+    stopTimer();
+    setOverlayStatus('Imported video ended.', false);
+  }
+};
+
+window.onAndroidImportedPreviewError = function(message) {
+  setOverlayStatus(message || 'Imported video preview failed', false);
+};
+
 {
   const preview = document.getElementById('import-preview');
   if (preview) preview.addEventListener('canplay', () => {
     if (M && M.running) resumeImportedVideo();
+  });
+  if (preview) preview.addEventListener('ended', () => {
+    if (isImportedVideoAnnotationMode() && M && M.running) {
+      stopTimer();
+      setOverlayStatus('Imported video ended.', false);
+    }
   });
 }
 
