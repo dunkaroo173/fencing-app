@@ -340,13 +340,13 @@ public class NativeOverlayExporter {
         String sideName = "L".equals(ev.optString("side")) ? "LEFT" : "R".equals(ev.optString("side")) ? "RIGHT" : "REFEREE";
         String action = ev.optString("label", "ACTION").toUpperCase(Locale.US);
         String result = ev.optBoolean("isHit", false) ? "TOUCH" : "OFF TARGET";
-        float titleSize = Math.max(22, h * 0.041f);
-        float metaSize = Math.max(13, h * 0.018f);
-        float resultSize = Math.max(14, h * 0.022f);
-        float pillW = Math.min(w - 44, Math.max(w * 0.50f, titleSize * Math.max(10, action.length() * 0.68f)));
-        float pillH = Math.max(112, titleSize * 3.2f);
+        float titleSize = Math.max(19, h * 0.036f);
+        float metaSize = Math.max(10, h * 0.016f);
+        float resultSize = Math.max(11, h * 0.019f);
+        float pillW = Math.min(w - 48, Math.max(w * 0.48f, titleSize * Math.max(10, action.length() * 0.62f)));
+        float pillH = Math.max(92, titleSize * 3.0f);
         float x = w / 2f - pillW / 2f;
-        float y = h * 0.76f - pillH / 2f;
+        float y = h * 0.78f - pillH / 2f;
 
         p.setAlpha((int) (alpha * 255));
         p.setColor(Color.argb(238, 2, 4, 10));
@@ -362,27 +362,22 @@ public class NativeOverlayExporter {
         p.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
         p.setTextSize(metaSize);
         p.setColor(sideColor);
-        canvas.drawText(sideName + " ACTION", w / 2f, y + pillH * 0.23f, p);
+        canvas.drawText(sideName + " ACTION", w / 2f, y + pillH * 0.25f, p);
+
         p.setTextSize(titleSize);
         p.setColor(Color.WHITE);
-        p.setStrokeWidth(5);
-        p.setStyle(Paint.Style.STROKE);
-        p.setColor(Color.argb(230, 0, 0, 0));
-        canvas.drawText(action, w / 2f, y + pillH * 0.52f, p);
-        p.setStyle(Paint.Style.FILL);
-        p.setColor(Color.WHITE);
-        canvas.drawText(action, w / 2f, y + pillH * 0.52f, p);
+        canvas.drawText(action, w / 2f, y + pillH * 0.54f, p);
 
         p.setTextSize(resultSize);
         int resultColor = ev.optBoolean("isHit", false) ? sideColor : Color.rgb(255, 206, 84);
-        float badgeW = Math.max(p.measureText(result) + 34, pillW * 0.22f);
-        float badgeH = Math.max(28, resultSize * 1.75f);
+        float badgeW = Math.max(p.measureText(result) + 28, pillW * 0.20f);
+        float badgeH = Math.max(22, resultSize * 1.65f);
         float bx = w / 2f - badgeW / 2f;
-        float by = y + pillH * 0.71f;
+        float by = y + pillH * 0.72f;
         p.setColor(resultColor);
         canvas.drawRoundRect(new RectF(bx, by, bx + badgeW, by + badgeH), badgeH / 2f, badgeH / 2f, p);
         p.setColor(ev.optBoolean("isHit", false) ? Color.rgb(2, 4, 10) : Color.rgb(34, 22, 0));
-        canvas.drawText(result, w / 2f, by + badgeH * 0.68f, p);
+        canvas.drawText(result, w / 2f, by + badgeH * 0.66f, p);
         p.setAlpha(255);
     }
 
@@ -674,9 +669,13 @@ public class NativeOverlayExporter {
         float scale = Math.min(1f, OUTPUT_MAX_EDGE / (float) Math.max(w, h));
         w = Math.max(2, Math.round(w * scale));
         h = Math.max(2, Math.round(h * scale));
-        if ((w & 1) == 1) w--;
-        if ((h & 1) == 1) h--;
+        w = alignUp(w, 16);
+        h = alignUp(h, 16);
         return new int[] {w, h};
+    }
+
+    private static int alignUp(int value, int multiple) {
+        return Math.max(multiple, ((value + multiple - 1) / multiple) * multiple);
     }
 
     private static String safeFilePart(String value) {
