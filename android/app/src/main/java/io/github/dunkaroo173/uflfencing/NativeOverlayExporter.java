@@ -71,6 +71,7 @@ public class NativeOverlayExporter {
         MediaMuxer muxer = null;
         MediaCodec encoder = null;
         MediaExtractor audioExtractor = null;
+        Bitmap composed = null;
         try {
             retriever.setDataSource(context, sourceUri);
             long durationMs = longMeta(retriever, MediaMetadataRetriever.METADATA_KEY_DURATION);
@@ -119,34 +120,32 @@ public class NativeOverlayExporter {
             int[] argb = new int[width * height];
             List<Long> sampleTimesUs = videoSampleTimesUs(sourceUri);
             int sampleIndex = 0;
+            long lastRetrievedSourceUs = Long.MIN_VALUE;
             Bitmap heldSource = null;
+            composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(composed);
 
             for (int frame = 0; frame < frameCount; frame++) {
                 long ptsUs = frame * frameDurationUs;
+                long sourceTimeUs = sourceTimeForOutputFrame(sampleTimesUs, sampleIndex, ptsUs);
                 if (!sampleTimesUs.isEmpty()) {
-                    while (sampleIndex < sampleTimesUs.size() && sampleTimesUs.get(sampleIndex) <= ptsUs) {
-                        Bitmap next = retrieveFrame(retriever, sampleTimesUs.get(sampleIndex));
-                        if (next != null) {
-                            if (heldSource != null) heldSource.recycle();
-                            heldSource = next;
-                        }
+                    while (sampleIndex + 1 < sampleTimesUs.size() && sampleTimesUs.get(sampleIndex + 1) <= ptsUs) {
                         sampleIndex++;
                     }
-                } else {
-                    Bitmap next = retrieveFrame(retriever, ptsUs);
+                }
+                if (sourceTimeUs != lastRetrievedSourceUs) {
+                    Bitmap next = retrieveFrame(retriever, sourceTimeUs);
                     if (next != null) {
                         if (heldSource != null) heldSource.recycle();
                         heldSource = next;
                     }
+                    lastRetrievedSourceUs = sourceTimeUs;
                 }
 
-                Bitmap composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(composed);
                 drawSource(canvas, heldSource, width, height);
                 drawOverlay(canvas, width, height, ptsUs / 1_000_000.0, timeOffset, useRecordingPauses, match);
                 composed.getPixels(argb, 0, width, 0, 0, width, height);
                 argbToYuv(argb, yuv, width, height, config.yuvLayout);
-                composed.recycle();
 
                 int inputIndex = encoder.dequeueInputBuffer(20_000);
                 if (inputIndex >= 0) {
@@ -175,6 +174,8 @@ public class NativeOverlayExporter {
                 heldSource.recycle();
                 heldSource = null;
             }
+            composed.recycle();
+            composed = null;
 
             int inputIndex = encoder.dequeueInputBuffer(20_000);
             if (inputIndex >= 0) {
@@ -190,6 +191,9 @@ public class NativeOverlayExporter {
             callback.onProgress(1.0, "Native export complete");
             return new Result(output, output.getName(), durationMs);
         } finally {
+            if (composed != null) {
+                try { composed.recycle(); } catch (Exception ignored) {}
+            }
             try { retriever.release(); } catch (Exception ignored) {}
             if (audioExtractor != null) {
                 try { audioExtractor.release(); } catch (Exception ignored) {}
@@ -634,6 +638,17 @@ public class NativeOverlayExporter {
             try { extractor.release(); } catch (Exception ignored) {}
         }
         return times;
+    }
+
+    private static long sourceTimeForOutputFrame(List<Long> sampleTimesUs, int sampleIndex, long ptsUs) {
+        if (sampleTimesUs.isEmpty()) return ptsUs;
+        int index = Math.max(0, Math.min(sampleIndex, sampleTimesUs.size() - 1));
+        while (index + 1 < sampleTimesUs.size() && sampleTimesUs.get(index + 1) <= ptsUs) {
+            index++;
+        }
+        long selected = sampleTimesUs.get(index);
+        if (selected > ptsUs && index > 0) return sampleTimesUs.get(index - 1);
+        return selected;
     }
 
     private static Bitmap retrieveFrame(MediaMetadataRetriever retriever, long timeUs) {
