@@ -90,12 +90,23 @@ public class AndroidVideoBridge {
                 JSONObject payload = new JSONObject(payloadJson);
                 final String sourceType = payload.optString("sourceType", "native");
                 emitProgress(sourceType, 0, "Preparing native export");
-                NativeOverlayExporter.Result result = new NativeOverlayExporter(activity, new NativeOverlayExporter.Callback() {
+                NativeOverlayExporter.Callback callback = new NativeOverlayExporter.Callback() {
                     @Override
                     public void onProgress(double progress, String message) {
                         emitProgress(sourceType, progress, message);
                     }
-                }).export(payload);
+                };
+                NativeOverlayExporter.Result result;
+                if ("imported".equals(sourceType)) {
+                    try {
+                        result = new Media3OverlayExporter(activity, callback).export(payload);
+                    } catch (Exception media3Error) {
+                        emitProgress(sourceType, 0.03, "Media3 export failed; using compatibility exporter");
+                        result = new NativeOverlayExporter(activity, callback).export(payload);
+                    }
+                } else {
+                    result = new NativeOverlayExporter(activity, callback).export(payload);
+                }
                 emitComplete(sourceType, result);
             } catch (Exception e) {
                 emitError("native", e);

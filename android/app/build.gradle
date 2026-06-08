@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     namespace 'io.github.dunkaroo173.uflfencing'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'io.github.dunkaroo173.uflfencing'
@@ -32,6 +32,9 @@ dependencies {
     implementation 'androidx.camera:camera-video:1.5.3'
     implementation 'androidx.camera:camera-view:1.5.3'
     implementation 'androidx.camera:camera-effects:1.5.3'
+    implementation 'androidx.media3:media3-transformer:1.10.1'
+    implementation 'androidx.media3:media3-effect:1.10.1'
+    implementation 'androidx.media3:media3-common:1.10.1'
 }
 
 configurations.configureEach {
