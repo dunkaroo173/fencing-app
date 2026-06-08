@@ -40,9 +40,11 @@ public class NativeOverlayExporter {
     }
 
     private static final String MIME_AVC = "video/avc";
-    private static final int OUTPUT_MAX_EDGE = 1280;
-    private static final int OUTPUT_FPS = 30;
+    private static final int OUTPUT_MAX_EDGE = 960;
+    private static final int OUTPUT_FPS = 24;
     private static final int OUTPUT_BITRATE = 8_000_000;
+    private static final int YUV_LAYOUT_PLANAR = 1;
+    private static final int YUV_LAYOUT_SEMIPLANAR_UV = 2;
 
     private final Context context;
     private final Callback callback;
@@ -143,7 +145,7 @@ public class NativeOverlayExporter {
                 drawSource(canvas, heldSource, width, height);
                 drawOverlay(canvas, width, height, ptsUs / 1_000_000.0, timeOffset, useRecordingPauses, match);
                 composed.getPixels(argb, 0, width, 0, 0, width, height);
-                argbToYuv(argb, yuv, width, height, config.colorFormat);
+                argbToYuv(argb, yuv, width, height, config.yuvLayout);
                 composed.recycle();
 
                 int inputIndex = encoder.dequeueInputBuffer(20_000);
@@ -472,11 +474,15 @@ public class NativeOverlayExporter {
             for (String type : info.getSupportedTypes()) {
                 if (!MIME_AVC.equalsIgnoreCase(type)) continue;
                 MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(type);
+                if (supportsColor(caps, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)) {
+                    return new EncoderConfig(info.getName(), MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar, YUV_LAYOUT_SEMIPLANAR_UV);
+                }
+                if (supportsColor(caps, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar)) {
+                    return new EncoderConfig(info.getName(), MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar, YUV_LAYOUT_PLANAR);
+                }
                 for (int color : caps.colorFormats) {
-                    if (color == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible ||
-                        color == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar ||
-                        color == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar) {
-                        return new EncoderConfig(info.getName(), color);
+                    if (color == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible) {
+                        return new EncoderConfig(info.getName(), color, YUV_LAYOUT_SEMIPLANAR_UV);
                     }
                 }
             }
@@ -484,9 +490,16 @@ public class NativeOverlayExporter {
         throw new IllegalStateException("No H.264 YUV encoder found");
     }
 
-    private static void argbToYuv(int[] argb, byte[] yuv, int width, int height, int colorFormat) {
+    private static boolean supportsColor(MediaCodecInfo.CodecCapabilities caps, int target) {
+        for (int color : caps.colorFormats) {
+            if (color == target) return true;
+        }
+        return false;
+    }
+
+    private static void argbToYuv(int[] argb, byte[] yuv, int width, int height, int yuvLayout) {
         int frameSize = width * height;
-        boolean semiPlanar = colorFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar;
+        boolean semiPlanar = yuvLayout == YUV_LAYOUT_SEMIPLANAR_UV;
         int yIndex = 0;
         int uIndex = frameSize;
         int vIndex = semiPlanar ? frameSize + 1 : frameSize + frameSize / 4;
@@ -674,9 +687,11 @@ public class NativeOverlayExporter {
     private static class EncoderConfig {
         final String codecName;
         final int colorFormat;
-        EncoderConfig(String codecName, int colorFormat) {
+        final int yuvLayout;
+        EncoderConfig(String codecName, int colorFormat, int yuvLayout) {
             this.codecName = codecName;
             this.colorFormat = colorFormat;
+            this.yuvLayout = yuvLayout;
         }
     }
 
