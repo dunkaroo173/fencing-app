@@ -104,6 +104,26 @@ public class AndroidVideoBridge {
     }
 
     @JavascriptInterface
+    public void prepareNativeRecording(String matchJson) {
+        activity.runOnUiThread(() -> activity.prepareNativeRecording(matchJson));
+    }
+
+    @JavascriptInterface
+    public void startNativeRecording(String filenameBase, String matchJson) {
+        activity.runOnUiThread(() -> activity.startNativeRecording(filenameBase, matchJson));
+    }
+
+    @JavascriptInterface
+    public void stopNativeRecording(String matchJson) {
+        activity.runOnUiThread(() -> activity.stopNativeRecording(matchJson));
+    }
+
+    @JavascriptInterface
+    public void updateNativeRecordingOverlay(String matchJson) {
+        activity.updateNativeRecordingOverlay(matchJson);
+    }
+
+    @JavascriptInterface
     public void shareExport(String outputUri, String displayName) {
         try {
             Uri uri = Uri.parse(outputUri);
@@ -137,6 +157,11 @@ public class AndroidVideoBridge {
         activity.clearNativePreview();
     }
 
+    @JavascriptInterface
+    public void clearNativeRecordingPreview() {
+        activity.runOnUiThread(activity::clearNativeRecordingPreview);
+    }
+
     void onVideoPicked(Uri uri) {
         executor.execute(() -> {
             try {
@@ -152,6 +177,46 @@ public class AndroidVideoBridge {
 
     void onVideoPickCanceled() {
         emit("window.onAndroidVideoPickCanceled", new JSONObject());
+    }
+
+    void onNativeRecordingReady() {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("ready", true);
+            emit("window.onAndroidRecordingReady", payload);
+        } catch (Exception ignored) {}
+    }
+
+    void onNativeRecordingStarted() {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("recording", true);
+            emit("window.onAndroidRecordingStarted", payload);
+        } catch (Exception ignored) {}
+    }
+
+    void onNativeRecordingStopped(Uri uri, String displayName, long durationMs) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("sourceType", "recorded");
+            payload.put("uri", uri.toString());
+            payload.put("savedUri", uri.toString());
+            payload.put("displayName", displayName == null ? "ufl-recording.mp4" : displayName);
+            payload.put("durationMs", durationMs);
+            payload.put("overlaid", true);
+            emit("window.onAndroidRecordingStopped", payload);
+        } catch (Exception e) {
+            emitError("recorded", e);
+        }
+    }
+
+    void onNativeRecordingError(String message) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("sourceType", "recorded");
+            payload.put("message", message == null ? "Native recording failed" : message);
+            emit("window.onAndroidRecordingError", payload);
+        } catch (Exception ignored) {}
     }
 
     void shutdown() {

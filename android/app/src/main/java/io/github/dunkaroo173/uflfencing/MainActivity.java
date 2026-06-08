@@ -4,8 +4,10 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.ViewGroup;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -13,8 +15,10 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import android.widget.FrameLayout;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -22,13 +26,29 @@ public class MainActivity extends AppCompatActivity {
     private static final int PICK_VIDEO_CODE = 2;
     private WebView webView;
     private AndroidVideoBridge videoBridge;
+    private PreviewView nativeCameraPreview;
+    private NativeCameraRecorder nativeCameraRecorder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        FrameLayout root = new FrameLayout(this);
+        nativeCameraPreview = new PreviewView(this);
+        nativeCameraPreview.setVisibility(android.view.View.GONE);
+        nativeCameraPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        root.addView(nativeCameraPreview, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
         webView = new WebView(this);
-        setContentView(webView);
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        setContentView(root);
 
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -39,6 +59,27 @@ public class MainActivity extends AppCompatActivity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
         videoBridge = new AndroidVideoBridge(this, webView);
+        nativeCameraRecorder = new NativeCameraRecorder(this, nativeCameraPreview, new NativeCameraRecorder.Callback() {
+            @Override
+            public void onReady() {
+                videoBridge.onNativeRecordingReady();
+            }
+
+            @Override
+            public void onStarted() {
+                videoBridge.onNativeRecordingStarted();
+            }
+
+            @Override
+            public void onStopped(Uri uri, String displayName, long durationMs) {
+                videoBridge.onNativeRecordingStopped(uri, displayName, durationMs);
+            }
+
+            @Override
+            public void onError(String message) {
+                videoBridge.onNativeRecordingError(message);
+            }
+        });
         webView.addJavascriptInterface(videoBridge, "AndroidVideo");
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
@@ -77,6 +118,26 @@ public class MainActivity extends AppCompatActivity {
     void seekNativePreview(double seconds) {}
     void clearNativePreview() {}
 
+    void prepareNativeRecording(String matchJson) {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.prepare(matchJson);
+    }
+
+    void startNativeRecording(String filenameBase, String matchJson) {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.start(filenameBase, matchJson);
+    }
+
+    void stopNativeRecording(String matchJson) {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.stop(matchJson);
+    }
+
+    void updateNativeRecordingOverlay(String matchJson) {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.updateOverlay(matchJson);
+    }
+
+    void clearNativeRecordingPreview() {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.clearPreview();
+    }
+
 
     private void loadApp() {
         webView.loadUrl("file:///android_asset/public/index.html");
@@ -110,6 +171,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (nativeCameraRecorder != null) nativeCameraRecorder.shutdown();
         if (videoBridge != null) videoBridge.shutdown();
         super.onDestroy();
     }
