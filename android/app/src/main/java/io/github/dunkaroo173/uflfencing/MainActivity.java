@@ -28,12 +28,16 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERM_CODE = 1;
     private static final int PICK_VIDEO_CODE = 2;
     private static final String TAG = "UFLMainActivity";
+    public static final String EXTRA_NATIVE_REVIEW_URI = "io.github.dunkaroo173.uflfencing.NATIVE_REVIEW_URI";
+    public static final String EXTRA_NATIVE_REVIEW_MATCH = "io.github.dunkaroo173.uflfencing.NATIVE_REVIEW_MATCH";
+    public static final String EXTRA_NATIVE_REVIEW_EVENT_INDEX = "io.github.dunkaroo173.uflfencing.NATIVE_REVIEW_EVENT_INDEX";
     private WebView webView;
     private AndroidVideoBridge videoBridge;
     private NativeImportPreview nativeImportPreview;
     private PreviewView nativeCameraPreview;
     private NativeCameraRecorder nativeCameraRecorder;
     private NativeVideoReviewView nativeVideoReviewView;
+    private boolean nativeReviewOnly;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,27 +90,32 @@ public class MainActivity extends AppCompatActivity {
         nativeVideoReviewView.setCallback(new NativeVideoReviewView.Callback() {
             @Override
             public void onKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
-                if (videoBridge != null) videoBridge.onVideoReviewKeep(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+                if (nativeReviewOnly) finish();
+                else if (videoBridge != null) videoBridge.onVideoReviewKeep(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
             }
 
             @Override
             public void onEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
-                if (videoBridge != null) videoBridge.onVideoReviewEdit(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+                if (nativeReviewOnly) Log.i(TAG, "native review edit requested");
+                else if (videoBridge != null) videoBridge.onVideoReviewEdit(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
             }
 
             @Override
             public void onNavigate(int eventIndex, int direction) {
-                if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventIndex, direction);
+                if (nativeReviewOnly) Log.i(TAG, "native review navigation requested");
+                else if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventIndex, direction);
             }
 
             @Override
             public void onClose() {
-                if (videoBridge != null) videoBridge.onVideoReviewClose();
+                if (nativeReviewOnly) finish();
+                else if (videoBridge != null) videoBridge.onVideoReviewClose();
             }
 
             @Override
             public void onError(String message) {
-                if (videoBridge != null) videoBridge.onVideoReviewError(message);
+                if (nativeReviewOnly) Log.e(TAG, "native review error: " + message);
+                else if (videoBridge != null) videoBridge.onVideoReviewError(message);
             }
         });
         root.addView(nativeVideoReviewView, new FrameLayout.LayoutParams(
@@ -114,6 +123,10 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
         setContentView(root);
+
+        if (maybeLaunchNativeReview(getIntent())) {
+            return;
+        }
 
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -255,6 +268,95 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("file:///android_asset/public/index.html");
     }
 
+    private boolean maybeLaunchNativeReview(Intent intent) {
+        Uri uri = reviewUriFromIntent(intent);
+        if (uri == null) return false;
+        nativeReviewOnly = true;
+        webView.setVisibility(android.view.View.GONE);
+        nativeImportPreview.setVisibility(android.view.View.GONE);
+        nativeCameraPreview.setVisibility(android.view.View.GONE);
+        getWindow().getDecorView().post(() -> {
+            try {
+                JSONObject payload = nativeReviewPayload(intent, uri);
+                nativeVideoReviewView.show(payload);
+            } catch (Exception e) {
+                Log.e(TAG, "Could not launch native review", e);
+            }
+        });
+        return true;
+    }
+
+    private Uri reviewUriFromIntent(Intent intent) {
+        if (intent == null) return null;
+        String extraUri = intent.getStringExtra(EXTRA_NATIVE_REVIEW_URI);
+        if (extraUri != null && !extraUri.isEmpty()) return Uri.parse(extraUri);
+        Uri data = intent.getData();
+        if (data == null) return null;
+        String type = intent.getType();
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) && (type == null || type.startsWith("video/"))) {
+            return data;
+        }
+        return null;
+    }
+
+    private JSONObject nativeReviewPayload(Intent intent, Uri uri) throws Exception {
+        JSONObject metadata = NativeVideoMetadata.forUri(this, uri);
+        long durationMs = Math.max(0L, metadata.optLong("durationMs", 0L));
+        double durationSec = durationMs / 1000.0;
+        int eventIndex = intent == null ? 0 : Math.max(0, intent.getIntExtra(EXTRA_NATIVE_REVIEW_EVENT_INDEX, 0));
+        JSONObject match = null;
+        if (intent != null) {
+            String matchJson = intent.getStringExtra(EXTRA_NATIVE_REVIEW_MATCH);
+            if (matchJson != null && !matchJson.isEmpty()) {
+                match = new JSONObject(matchJson);
+            }
+        }
+        if (match == null) {
+            match = sampleReviewMatch(durationSec);
+        }
+        double eventVideoTime = Math.min(Math.max(5.0, durationSec > 0 ? durationSec * 0.5 : 5.0), Math.max(5.0, durationSec - 1.0));
+        JSONObject payload = new JSONObject();
+        payload.put("sourceUri", uri.toString());
+        payload.put("sourceType", "native-review");
+        payload.put("eventIndex", eventIndex);
+        payload.put("eventVideoTime", eventVideoTime);
+        payload.put("clipStart", Math.max(0.0, eventVideoTime - 5.0));
+        payload.put("clipEnd", durationSec > 0 ? Math.min(durationSec, eventVideoTime + 2.0) : eventVideoTime + 2.0);
+        payload.put("durationSec", durationSec);
+        payload.put("playbackRate", 0.5);
+        payload.put("match", match);
+        payload.put("title", "Native Video Review");
+        return payload;
+    }
+
+    private JSONObject sampleReviewMatch(double durationSec) throws Exception {
+        double ts = Math.min(Math.max(5.0, durationSec > 0 ? durationSec * 0.5 : 5.0), 170.0);
+        JSONObject match = new JSONObject();
+        match.put("nameL", "LEFT");
+        match.put("nameR", "RIGHT");
+        match.put("periodDuration", 180);
+        match.put("period", 1);
+        match.put("timerSec", Math.max(0, 180 - (int) Math.floor(ts)));
+        match.put("scoreL", 0);
+        match.put("scoreR", 1);
+        match.put("hpL", 90);
+        match.put("hpR", 100);
+        org.json.JSONArray events = new org.json.JSONArray();
+        JSONObject event = new JSONObject();
+        event.put("ts", ts);
+        event.put("period", 1);
+        event.put("side", "R");
+        event.put("actionId", 200);
+        event.put("label", "Simple Attack");
+        event.put("emoji", "A");
+        event.put("isHit", true);
+        event.put("reviewed", false);
+        event.put("reviewStatus", "pending");
+        events.put(event);
+        match.put("events", events);
+        return match;
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -272,6 +374,13 @@ public class MainActivity extends AppCompatActivity {
         } else if (requestCode == PICK_VIDEO_CODE && videoBridge != null) {
             videoBridge.onVideoPickCanceled();
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        maybeLaunchNativeReview(intent);
     }
 
     @Override
