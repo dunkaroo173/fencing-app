@@ -182,6 +182,16 @@ public class AndroidVideoBridge {
         activity.runOnUiThread(activity::clearNativeRecordingPreview);
     }
 
+    @JavascriptInterface
+    public void startVideoReview(String payloadJson) {
+        activity.showVideoReview(payloadJson);
+    }
+
+    @JavascriptInterface
+    public void closeVideoReview() {
+        activity.hideVideoReview();
+    }
+
     void onVideoPicked(Uri uri) {
         executor.execute(() -> {
             try {
@@ -240,6 +250,35 @@ public class AndroidVideoBridge {
         } catch (Exception ignored) {}
     }
 
+    void onVideoReviewKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+        emitVideoReviewDecision("window.onAndroidVideoReviewKeep", eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+    }
+
+    void onVideoReviewEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+        emitVideoReviewDecision("window.onAndroidVideoReviewEdit", eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+    }
+
+    void onVideoReviewNavigate(int eventIndex, int direction) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("eventIndex", eventIndex);
+            payload.put("direction", direction);
+            emit("window.onAndroidVideoReviewNavigate", payload);
+        } catch (Exception ignored) {}
+    }
+
+    void onVideoReviewClose() {
+        emit("window.onAndroidVideoReviewClose", new JSONObject());
+    }
+
+    void onVideoReviewError(String message) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("message", message == null ? "Video review failed" : message);
+            emit("window.onAndroidVideoReviewError", payload);
+        } catch (Exception ignored) {}
+    }
+
     void shutdown() {
         executor.shutdownNow();
         for (FileOutputStream out : sessions.values()) {
@@ -255,6 +294,19 @@ public class AndroidVideoBridge {
             payload.put("progress", progress);
             payload.put("message", message);
             emit("window.onAndroidExportProgress", payload);
+        } catch (Exception ignored) {}
+    }
+
+    private void emitVideoReviewDecision(String functionName, int eventIndex, double chosenTimeSec,
+                                         double clipStartSec, double clipEndSec, double playbackRate) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("eventIndex", eventIndex);
+            payload.put("chosenTime", chosenTimeSec);
+            payload.put("clipStart", clipStartSec);
+            payload.put("clipEnd", clipEndSec);
+            payload.put("playbackRate", playbackRate);
+            emit(functionName, payload);
         } catch (Exception ignored) {}
     }
 

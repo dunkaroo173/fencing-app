@@ -33,6 +33,7 @@ public class MainActivity extends AppCompatActivity {
     private NativeImportPreview nativeImportPreview;
     private PreviewView nativeCameraPreview;
     private NativeCameraRecorder nativeCameraRecorder;
+    private NativeVideoReviewView nativeVideoReviewView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,6 +78,38 @@ public class MainActivity extends AppCompatActivity {
         nativeCameraPreview.setClickable(false);
         nativeCameraPreview.setFocusable(false);
         root.addView(nativeCameraPreview, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        nativeVideoReviewView = new NativeVideoReviewView(this);
+        nativeVideoReviewView.setCallback(new NativeVideoReviewView.Callback() {
+            @Override
+            public void onKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+                if (videoBridge != null) videoBridge.onVideoReviewKeep(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+            }
+
+            @Override
+            public void onEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+                if (videoBridge != null) videoBridge.onVideoReviewEdit(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+            }
+
+            @Override
+            public void onNavigate(int eventIndex, int direction) {
+                if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventIndex, direction);
+            }
+
+            @Override
+            public void onClose() {
+                if (videoBridge != null) videoBridge.onVideoReviewClose();
+            }
+
+            @Override
+            public void onError(String message) {
+                if (videoBridge != null) videoBridge.onVideoReviewError(message);
+            }
+        });
+        root.addView(nativeVideoReviewView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
@@ -201,6 +234,22 @@ public class MainActivity extends AppCompatActivity {
         if (nativeCameraRecorder != null) nativeCameraRecorder.clearPreview();
     }
 
+    void showVideoReview(String payloadJson) {
+        runOnUiThread(() -> {
+            try {
+                pauseNativePreview();
+                if (nativeCameraRecorder != null) nativeCameraRecorder.clearPreview();
+                nativeVideoReviewView.show(new JSONObject(payloadJson));
+            } catch (Exception e) {
+                if (videoBridge != null) videoBridge.onVideoReviewError(e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+        });
+    }
+
+    void hideVideoReview() {
+        runOnUiThread(() -> nativeVideoReviewView.hide());
+    }
+
 
     private void loadApp() {
         webView.loadUrl("file:///android_asset/public/index.html");
@@ -234,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (nativeVideoReviewView != null) nativeVideoReviewView.release();
         if (nativeImportPreview != null) nativeImportPreview.release();
         if (nativeCameraRecorder != null) nativeCameraRecorder.shutdown();
         if (videoBridge != null) videoBridge.shutdown();

@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 
 const APP_PATH = '/ufl/ufl-mobile.html';
+const ANDROID_APP_PATH = '/ufl-android/index.html';
 
 const parseTimer = (s: string): number => {
   const [m, sec] = s.split(':').map(Number);
@@ -482,5 +483,83 @@ test.describe('overlay video export', () => {
     await page.locator('#exp-overlay').tap();
     await expect(page.locator('#overlay-status')).toContainText('Overlay export is not supported');
     await expect(page.locator('#exp-json')).toBeEnabled();
+  });
+});
+
+test.describe('native video review', () => {
+  test('opens latest pending action with a native review payload around the event timestamp', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const payload = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        exportOverlay() {},
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true },
+        { ts: 12, period: 1, side: 'R', actionId: 212, label: 'Point in Line', emoji: 'P', isHit: false },
+      ];
+      (window as any).startVideoReviewForIndex();
+      return (window as any).__reviewPayload;
+    });
+
+    expect(payload.eventIndex).toBe(1);
+    expect(payload.sourceUri).toBe('content://review/source.mp4');
+    expect(payload.eventVideoTime).toBe(12);
+    expect(payload.clipStart).toBe(7);
+    expect(payload.clipEnd).toBe(14);
+    expect(payload.playbackRate).toBe(0.5);
+    expect(payload.title).toContain('POINT IN LINE');
+  });
+
+  test('review keep and correction preserve audit fields and recompute score', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 10, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).recomputeMatchScoreFromEvents();
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventIndex: 1,
+        chosenTime: 10.2,
+        clipStart: 5,
+        clipEnd: 12,
+        playbackRate: 0.25,
+      }));
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      (window as any).doConfirm('L', 100, false);
+      return {
+        scoreL: M.scoreL,
+        scoreR: M.scoreR,
+        kept: M.events[1],
+        corrected: M.events[0],
+      };
+    });
+
+    expect(result.scoreL).toBe(0);
+    expect(result.scoreR).toBe(1);
+    expect(result.kept.reviewStatus).toBe('confirmed');
+    expect(result.kept.videoReview.playbackRate).toBe(0.25);
+    expect(result.corrected.reviewStatus).toBe('corrected');
+    expect(result.corrected.originalActionId).toBe(100);
+    expect(result.corrected.originalIsHit).toBe(true);
+    expect(result.corrected.isHit).toBe(false);
+    expect(result.corrected.videoReview.chosenTime).toBe(8.1);
   });
 });

@@ -1,0 +1,345 @@
+package io.github.dunkaroo173.uflfencing;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.AttributeSet;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import androidx.annotation.Nullable;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
+import org.json.JSONObject;
+
+class NativeVideoReviewView extends FrameLayout {
+    interface Callback {
+        void onKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
+        void onEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
+        void onNavigate(int eventIndex, int direction);
+        void onClose();
+        void onError(String message);
+    }
+
+    private static final long TICK_MS = 120L;
+    private static final double DEFAULT_LEAD_SEC = 5.0;
+    private static final double DEFAULT_TAIL_SEC = 2.0;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final PlayerView playerView;
+    private final TextView titleView;
+    private final TextView timeView;
+    private final TextView speedView;
+    private final SeekBar scrubber;
+    private final Button playButton;
+    private final Button speed025Button;
+    private final Button speed05Button;
+    private final Button speed1Button;
+
+    private ExoPlayer player;
+    private Callback callback;
+    private int eventIndex = -1;
+    private double eventTimeSec;
+    private double clipStartSec;
+    private double clipEndSec;
+    private double playbackRate = 0.5;
+    private boolean userScrubbing;
+
+    private final Runnable ticker = new Runnable() {
+        @Override
+        public void run() {
+            syncUi();
+            if (player != null && player.isPlaying() && player.getCurrentPosition() >= secondsToMs(clipEndSec)) {
+                player.pause();
+                player.seekTo(secondsToMs(clipStartSec));
+            }
+            handler.postDelayed(this, TICK_MS);
+        }
+    };
+
+    NativeVideoReviewView(Context context) {
+        this(context, null);
+    }
+
+    NativeVideoReviewView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setBackgroundColor(Color.BLACK);
+        setVisibility(GONE);
+
+        playerView = new PlayerView(context);
+        playerView.setUseController(false);
+        addView(playerView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+
+        LinearLayout top = new LinearLayout(context);
+        top.setOrientation(LinearLayout.VERTICAL);
+        top.setPadding(dp(14), dp(10), dp(14), dp(8));
+        top.setBackgroundColor(Color.argb(210, 0, 0, 0));
+        titleView = label(context, 18, Color.WHITE);
+        timeView = label(context, 13, Color.rgb(210, 216, 232));
+        top.addView(titleView);
+        top.addView(timeView);
+        LayoutParams topParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP);
+        addView(top, topParams);
+
+        LinearLayout bottom = new LinearLayout(context);
+        bottom.setOrientation(LinearLayout.VERTICAL);
+        bottom.setPadding(dp(14), dp(8), dp(14), dp(10));
+        bottom.setBackgroundColor(Color.argb(225, 0, 0, 0));
+
+        scrubber = new SeekBar(context);
+        scrubber.setMax(1000);
+        bottom.addView(scrubber, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(34)));
+
+        LinearLayout controls = new LinearLayout(context);
+        controls.setGravity(Gravity.CENTER);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button back2 = button(context, "-2s");
+        Button back1 = button(context, "-1s");
+        Button fwd1 = button(context, "+1s");
+        Button fwd2 = button(context, "+2s");
+        playButton = button(context, "PLAY");
+        Button replay = button(context, "REPLAY");
+        speed025Button = button(context, "0.25x");
+        speed05Button = button(context, "0.5x");
+        speed1Button = button(context, "1x");
+        speedView = label(context, 12, Color.rgb(245, 200, 66));
+
+        controls.addView(back2);
+        controls.addView(back1);
+        controls.addView(playButton);
+        controls.addView(replay);
+        controls.addView(fwd1);
+        controls.addView(fwd2);
+        controls.addView(speed025Button);
+        controls.addView(speed05Button);
+        controls.addView(speed1Button);
+        controls.addView(speedView);
+        bottom.addView(controls);
+
+        LinearLayout decisions = new LinearLayout(context);
+        decisions.setGravity(Gravity.CENTER);
+        decisions.setOrientation(LinearLayout.HORIZONTAL);
+        Button previous = button(context, "PREV");
+        Button keep = button(context, "KEEP");
+        Button edit = button(context, "EDIT");
+        Button next = button(context, "NEXT");
+        Button close = button(context, "CLOSE");
+        decisions.addView(previous);
+        decisions.addView(keep);
+        decisions.addView(edit);
+        decisions.addView(next);
+        decisions.addView(close);
+        bottom.addView(decisions);
+
+        LayoutParams bottomParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        addView(bottom, bottomParams);
+
+        scrubber.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser || player == null) return;
+                double target = clipStartSec + ((clipEndSec - clipStartSec) * (progress / 1000.0));
+                player.seekTo(secondsToMs(target));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                userScrubbing = true;
+                if (player != null) player.pause();
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                userScrubbing = false;
+                syncUi();
+            }
+        });
+
+        playButton.setOnClickListener(v -> togglePlay());
+        replay.setOnClickListener(v -> replay());
+        back2.setOnClickListener(v -> shift(-2));
+        back1.setOnClickListener(v -> shift(-1));
+        fwd1.setOnClickListener(v -> shift(1));
+        fwd2.setOnClickListener(v -> shift(2));
+        speed025Button.setOnClickListener(v -> setPlaybackRate(0.25));
+        speed05Button.setOnClickListener(v -> setPlaybackRate(0.5));
+        speed1Button.setOnClickListener(v -> setPlaybackRate(1.0));
+        previous.setOnClickListener(v -> {
+            if (callback != null) callback.onNavigate(eventIndex, -1);
+        });
+        next.setOnClickListener(v -> {
+            if (callback != null) callback.onNavigate(eventIndex, 1);
+        });
+        keep.setOnClickListener(v -> {
+            if (callback != null) callback.onKeep(eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
+        });
+        edit.setOnClickListener(v -> {
+            if (callback != null) callback.onEdit(eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
+        });
+        close.setOnClickListener(v -> {
+            hide();
+            if (callback != null) callback.onClose();
+        });
+    }
+
+    void setCallback(Callback callback) {
+        this.callback = callback;
+    }
+
+    void show(JSONObject payload) {
+        try {
+            String uri = payload.getString("sourceUri");
+            eventIndex = payload.optInt("eventIndex", -1);
+            eventTimeSec = Math.max(0.0, payload.optDouble("eventVideoTime", 0.0));
+            double durationSec = payload.optDouble("durationSec", 0.0);
+            clipStartSec = Math.max(0.0, payload.optDouble("clipStart", eventTimeSec - DEFAULT_LEAD_SEC));
+            clipEndSec = payload.optDouble("clipEnd", eventTimeSec + DEFAULT_TAIL_SEC);
+            if (durationSec > 0) clipEndSec = Math.min(durationSec, clipEndSec);
+            clipEndSec = Math.max(clipStartSec + 0.5, clipEndSec);
+            playbackRate = payload.optDouble("playbackRate", 0.5);
+
+            titleView.setText(payload.optString("title", "Video Review"));
+
+            if (player == null) {
+                player = new ExoPlayer.Builder(getContext()).build();
+                playerView.setPlayer(player);
+                player.addListener(new Player.Listener() {
+                    @Override
+                    public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                        if (callback != null) callback.onError(error.getMessage() == null ? error.toString() : error.getMessage());
+                    }
+                });
+            }
+            player.setMediaItem(MediaItem.fromUri(Uri.parse(uri)));
+            player.prepare();
+            player.setPlaybackParameters(new PlaybackParameters((float) playbackRate));
+            player.seekTo(secondsToMs(clipStartSec));
+            setVisibility(VISIBLE);
+            updateSpeedButtons();
+            handler.removeCallbacks(ticker);
+            handler.post(ticker);
+        } catch (Exception e) {
+            if (callback != null) callback.onError(e.getMessage() == null ? e.toString() : e.getMessage());
+        }
+    }
+
+    void hide() {
+        handler.removeCallbacks(ticker);
+        if (player != null) player.pause();
+        setVisibility(GONE);
+    }
+
+    void release() {
+        handler.removeCallbacks(ticker);
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+    }
+
+    private void togglePlay() {
+        if (player == null) return;
+        if (player.isPlaying()) {
+            player.pause();
+        } else {
+            long pos = player.getCurrentPosition();
+            if (pos < secondsToMs(clipStartSec) || pos >= secondsToMs(clipEndSec)) {
+                player.seekTo(secondsToMs(clipStartSec));
+            }
+            player.play();
+        }
+        syncUi();
+    }
+
+    private void replay() {
+        if (player == null) return;
+        player.seekTo(secondsToMs(clipStartSec));
+        player.play();
+    }
+
+    private void shift(double deltaSec) {
+        if (player == null) return;
+        double target = clamp(currentSec() + deltaSec, clipStartSec, clipEndSec);
+        player.seekTo(secondsToMs(target));
+        syncUi();
+    }
+
+    private void setPlaybackRate(double rate) {
+        playbackRate = rate;
+        if (player != null) {
+            player.setPlaybackParameters(new PlaybackParameters((float) rate));
+        }
+        updateSpeedButtons();
+    }
+
+    private void syncUi() {
+        if (player == null) return;
+        double current = currentSec();
+        if (!userScrubbing) {
+            double span = Math.max(0.001, clipEndSec - clipStartSec);
+            int progress = (int) Math.round(clamp((current - clipStartSec) / span, 0, 1) * 1000);
+            scrubber.setProgress(progress);
+        }
+        playButton.setText(player.isPlaying() ? "PAUSE" : "PLAY");
+        timeView.setText(String.format(
+                java.util.Locale.US,
+                "Event %.2fs | Review %.2fs - %.2fs | Current %.2fs",
+                eventTimeSec,
+                clipStartSec,
+                clipEndSec,
+                current));
+    }
+
+    private void updateSpeedButtons() {
+        speedView.setText(String.format(java.util.Locale.US, " %.2fx", playbackRate));
+        speed025Button.setTextColor(playbackRate == 0.25 ? Color.rgb(245, 200, 66) : Color.WHITE);
+        speed05Button.setTextColor(playbackRate == 0.5 ? Color.rgb(245, 200, 66) : Color.WHITE);
+        speed1Button.setTextColor(playbackRate == 1.0 ? Color.rgb(245, 200, 66) : Color.WHITE);
+    }
+
+    private double currentSec() {
+        return player == null ? clipStartSec : player.getCurrentPosition() / 1000.0;
+    }
+
+    private static long secondsToMs(double seconds) {
+        return Math.max(0L, Math.round(seconds * 1000.0));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private TextView label(Context context, int sp, int color) {
+        TextView view = new TextView(context);
+        view.setTextColor(color);
+        view.setTextSize(sp);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setPadding(dp(4), dp(2), dp(4), dp(2));
+        return view;
+    }
+
+    private Button button(Context context, String text) {
+        Button button = new Button(context);
+        button.setText(text);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setPadding(dp(8), dp(4), dp(8), dp(4));
+        button.setMinWidth(dp(64));
+        return button;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+}

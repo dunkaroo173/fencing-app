@@ -475,6 +475,7 @@ body.android-native-preview #import-preview{display:none!important}
           <button class="exp-btn" id="exp-csv">⬇ Export CSV</button>
           <button class="exp-btn" id="exp-txt">⬇ Export TXT</button>
           <button class="exp-btn" id="exp-video" style="display:none">⬇ Export Overlay Video</button>
+          <button class="exp-btn" id="video-review" style="display:none">▶ Video Review</button>
           <button class="exp-btn" id="imp-video">⬆ Import Video</button>
           <button class="exp-btn" id="exp-overlay" style="display:none">⬇ Export Overlay</button>
         </div>
@@ -1219,7 +1220,49 @@ function doConfirm(side, actionId, isHit) {
                       label: action ? action.label : '?',
                       emoji: action ? action.emoji  : '?',
                       isHit: scored,
-                      period: M.period };
+                      period: M.period,
+                      reviewed: false,
+                      reviewStatus: 'pending' };
+
+  if (_reviewEditIndex !== null && M.events[_reviewEditIndex]) {
+    const old = M.events[_reviewEditIndex];
+    const originalActionId = old.originalActionId !== undefined ? old.originalActionId : old.actionId;
+    const originalLabel = old.originalLabel !== undefined ? old.originalLabel : old.label;
+    const originalIsHit = old.originalIsHit !== undefined ? old.originalIsHit : old.isHit;
+    const originalSide = old.originalSide !== undefined ? old.originalSide : old.side;
+    M.events[_reviewEditIndex] = {
+      ...old,
+      side: ev.side,
+      actionId: ev.actionId,
+      label: ev.label,
+      emoji: ev.emoji,
+      isHit: ev.isHit,
+      reviewed: true,
+      reviewedAt: Date.now(),
+      reviewStatus: 'corrected',
+      originalActionId,
+      originalLabel,
+      originalIsHit,
+      originalSide,
+      correctedAt: Date.now(),
+      videoReview: {
+        ...(old.videoReview || {}),
+        ...(_reviewEditMeta || {}),
+      },
+    };
+    _lastAction = { emoji: ev.emoji, label: ev.label, side: ev.side, isHit: scored };
+    _lastActionAt = performance.now();
+    const editedIndex = _reviewEditIndex;
+    _reviewEditIndex = null;
+    _reviewEditMeta = null;
+    recomputeMatchScoreFromEvents();
+    if (typeof scheduleSave === 'function') scheduleSave();
+    buildReport();
+    setOverlayStatus('Review correction saved.', false);
+    setTimeout(() => startVideoReviewForIndex(editedIndex), 250);
+    return;
+  }
+
   M.events.push(ev);
   // Stamp for overlay pill (shown on recording canvas for 3 s)
   _lastAction   = { emoji: ev.emoji, label: ev.label, side: ev.side, isHit: scored };
@@ -1301,6 +1344,8 @@ let _nativePendingRecordingStartBoutElapsed = null;
 let _nativeOverlayTimer = null;
 let _nativeRecordingReadyPromise = null;
 let _nativeRecordingReadyResolver = null;
+let _reviewEditIndex = null;
+let _reviewEditMeta = null;
 let _isRenderingOverlay = false;
 let _videoImportPending = false;
 
@@ -1801,6 +1846,52 @@ function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
     cursor = end;
   }
   return boutTime - pausedTotal;
+}
+
+function boutTimeToVideoTime(boutTime, timeOffset, useRecordingPauses) {
+  const target = Number(boutTime) || 0;
+  const offset = Number(timeOffset) || 0;
+  if (!useRecordingPauses || !M || !Array.isArray(M.recordingPauses)) {
+    return Math.max(0, target - offset);
+  }
+
+  const pauses = M.recordingPauses
+    .map(p => ({
+      startVideo: Number(p.startVideo),
+      endVideo: Number(p.endVideo),
+      boutTime: Number(p.boutTime),
+    }))
+    .filter(p => Number.isFinite(p.startVideo) && Number.isFinite(p.endVideo) && p.endVideo > p.startVideo)
+    .sort((a, b) => a.startVideo - b.startVideo);
+
+  let pausedTotal = 0;
+  let cursor = 0;
+  for (const p of pauses) {
+    const start = Math.max(p.startVideo, cursor);
+    const end = Math.max(p.endVideo, start);
+    if (end <= start) continue;
+    const timelineBoutAtPauseStart = start + offset - pausedTotal;
+    const storedBout = Number.isFinite(p.boutTime) ? p.boutTime : timelineBoutAtPauseStart;
+    const freezeBout = Math.max(storedBout, timelineBoutAtPauseStart);
+    if (target < freezeBout || Math.abs(target - freezeBout) < 0.05) {
+      return Math.max(0, target >= timelineBoutAtPauseStart ? start : target - offset + pausedTotal);
+    }
+    pausedTotal += end - start;
+    cursor = end;
+  }
+  return Math.max(0, target - offset + pausedTotal);
+}
+
+function recomputeMatchScoreFromEvents() {
+  if (!M) return;
+  const state = replayStateAt(Number.POSITIVE_INFINITY, M.events || []);
+  M.scoreL = state.scoreL;
+  M.scoreR = state.scoreR;
+  M.hpL = state.hpL;
+  M.hpR = state.hpR;
+  M.cardsL = state.cardsL;
+  M.cardsR = state.cardsR;
+  refreshHUD();
 }
 
 function markRecordingStart(boutElapsed) {
@@ -2422,10 +2513,124 @@ async function exportImportedOverlay() {
   exportRenderedOverlay(_importVideoFile, 'imported', { timeOffset: 0 });
 }
 
+function isAndroidVideoReviewAvailable() {
+  return !!(window.AndroidVideo && typeof AndroidVideo.startVideoReview === 'function');
+}
+
+function videoReviewSource() {
+  if (_nativeImportVideo && _nativeImportVideo.uri) {
+    return {
+      uri: _nativeImportVideo.uri,
+      durationSec: Number(_nativeImportVideo.durationMs || 0) / 1000,
+      timeOffset: 0,
+      useRecordingPauses: false,
+      sourceType: 'imported',
+    };
+  }
+  if (_nativeRecordedPayload && (_nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri)) {
+    return {
+      uri: _nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri,
+      durationSec: Number(_nativeRecordedPayload.durationMs || 0) / 1000,
+      timeOffset: M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined ? Number(M.recordingStartBoutTs) : 0,
+      useRecordingPauses: true,
+      sourceType: 'recorded',
+    };
+  }
+  return null;
+}
+
+function eventReviewTitle(ev, index) {
+  const sideName = ev.side === 'L' ? M.nameL : ev.side === 'R' ? M.nameR : 'REF';
+  const result = ev.isHit ? 'HIT' : ev.side === 'C' ? 'NO TOUCH' : 'OFF TARGET';
+  const status = ev.reviewStatus === 'corrected' ? 'CORRECTED' : ev.reviewed ? 'CONFIRMED' : 'PENDING';
+  return `#${index + 1} ${sideName}: ${String(ev.label || '').toUpperCase()} - ${result} (${status})`;
+}
+
+function latestReviewableEventIndex() {
+  if (!M || !Array.isArray(M.events) || M.events.length === 0) return -1;
+  for (let i = M.events.length - 1; i >= 0; i--) {
+    const ev = M.events[i];
+    if (ev && !ev.reviewed && (ev.side === 'L' || ev.side === 'R')) return i;
+  }
+  for (let i = M.events.length - 1; i >= 0; i--) {
+    const ev = M.events[i];
+    if (ev && (ev.side === 'L' || ev.side === 'R')) return i;
+  }
+  return M.events.length - 1;
+}
+
+function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
+  if (!M || !M.events || index < 0 || index >= M.events.length) {
+    setOverlayStatus('No action available for video review.', false);
+    return;
+  }
+  if (!isAndroidVideoReviewAvailable()) {
+    setOverlayStatus('Native video review is available only in the Android app.', false);
+    return;
+  }
+  const source = videoReviewSource();
+  if (!source || !source.uri) {
+    setOverlayStatus('No source video available for review. Import a video or record a bout first.', false);
+    return;
+  }
+  const ev = M.events[index];
+  const eventBoutTime = overlayEventTime(ev);
+  const eventVideoTime = boutTimeToVideoTime(eventBoutTime, source.timeOffset, source.useRecordingPauses);
+  const clipStart = Math.max(0, eventVideoTime - 5);
+  const clipEnd = source.durationSec > 0 ? Math.min(source.durationSec, eventVideoTime + 2) : eventVideoTime + 2;
+  stopTimer();
+  closeDrawer();
+  try {
+    AndroidVideo.startVideoReview(JSON.stringify({
+      sourceUri: source.uri,
+      sourceType: source.sourceType,
+      eventIndex: index,
+      eventVideoTime,
+      clipStart,
+      clipEnd,
+      durationSec: source.durationSec,
+      playbackRate: ev.videoReview && ev.videoReview.playbackRate ? ev.videoReview.playbackRate : 0.5,
+      title: eventReviewTitle(ev, index),
+    }));
+  } catch (err) {
+    setOverlayStatus(err && err.message ? err.message : 'Could not start video review.', false);
+  }
+}
+
+function markReviewDecision(payload, status) {
+  const index = Number(payload.eventIndex);
+  if (!M || !M.events || !M.events[index]) return false;
+  const ev = M.events[index];
+  ev.reviewed = true;
+  ev.reviewedAt = Date.now();
+  ev.reviewStatus = status;
+  ev.videoReview = {
+    ...(ev.videoReview || {}),
+    clipStart: Number(payload.clipStart),
+    clipEnd: Number(payload.clipEnd),
+    chosenTime: Number(payload.chosenTime),
+    playbackRate: Number(payload.playbackRate) || 0.5,
+  };
+  if (typeof scheduleSave === 'function') scheduleSave();
+  buildReport();
+  return true;
+}
+
+function adjacentReviewIndex(index, direction) {
+  if (!M || !Array.isArray(M.events) || M.events.length === 0) return -1;
+  const step = direction >= 0 ? 1 : -1;
+  for (let i = index + step; i >= 0 && i < M.events.length; i += step) {
+    const ev = M.events[i];
+    if (ev && (ev.side === 'L' || ev.side === 'R')) return i;
+  }
+  return index;
+}
+
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
 document.getElementById('exp-csv').addEventListener('touchend',  e=>{ e.preventDefault(); exportCSV();  },{passive:false});
 document.getElementById('exp-txt').addEventListener('touchend',  e=>{ e.preventDefault(); exportTXT();  },{passive:false});
 document.getElementById('exp-video').addEventListener('touchend',e=>{ e.preventDefault(); exportVideo();},{passive:false});
+document.getElementById('video-review').addEventListener('touchend',e=>{ e.preventDefault(); startVideoReviewForIndex();},{passive:false});
 document.getElementById('imp-video').addEventListener('touchend', e=>{
   e.preventDefault(); openVideoPicker();
 },{passive:false});
@@ -2536,6 +2741,55 @@ window.onAndroidVideoPickCanceled = function() {
   setImportVideoStatus('');
 };
 
+window.onAndroidVideoReviewKeep = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  if (!markReviewDecision(payload, 'confirmed')) return;
+  setOverlayStatus('Action confirmed in video review.', false);
+  const next = adjacentReviewIndex(Number(payload.eventIndex), -1);
+  if (next !== Number(payload.eventIndex)) {
+    startVideoReviewForIndex(next);
+  } else {
+    try {
+      if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
+    } catch (_) {}
+  }
+};
+
+window.onAndroidVideoReviewEdit = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  const index = Number(payload.eventIndex);
+  if (!M || !M.events || !M.events[index]) return;
+  const ev = M.events[index];
+  _reviewEditIndex = index;
+  _reviewEditMeta = {
+    clipStart: Number(payload.clipStart),
+    clipEnd: Number(payload.clipEnd),
+    chosenTime: Number(payload.chosenTime),
+    playbackRate: Number(payload.playbackRate) || 0.5,
+  };
+  try {
+    if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
+  } catch (_) {}
+  showScreen('s-match');
+  setOverlayStatus('Choose the corrected action.', false);
+  openPie(ev.side === 'R' ? 'R' : 'L');
+};
+
+window.onAndroidVideoReviewNavigate = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  const next = adjacentReviewIndex(Number(payload.eventIndex), Number(payload.direction));
+  startVideoReviewForIndex(next);
+};
+
+window.onAndroidVideoReviewClose = function() {
+  setOverlayStatus('', false);
+};
+
+window.onAndroidVideoReviewError = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  setOverlayStatus(payload.message || 'Video review failed.', false);
+};
+
 window.onAndroidImportedPreviewEnded = function() {
   if (isImportedVideoAnnotationMode() && M && M.running) {
     stopTimer();
@@ -2565,6 +2819,7 @@ function openDrawer() {
   buildReport();
   document.getElementById('exp-video').style.display = (_recBlob || _nativeRecordedPayload) ? 'inline-block' : 'none';
   document.getElementById('exp-overlay').style.display = _importVideoFile ? 'inline-block' : 'none';
+  document.getElementById('video-review').style.display = (M && M.events && M.events.length && videoReviewSource()) ? 'inline-block' : 'none';
   document.getElementById('drawer').classList.add('on');
   document.getElementById('drawer-backdrop').classList.add('on');
 }
