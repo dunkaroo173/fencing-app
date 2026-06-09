@@ -2,6 +2,8 @@ package io.github.dunkaroo173.uflfencing;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -37,6 +39,12 @@ class NativeVideoReviewView extends FrameLayout {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final PlayerView playerView;
     private final TextView titleView;
+    private final TextView leftScoreView;
+    private final TextView timerView;
+    private final TextView rightScoreView;
+    private final TextView actionSideView;
+    private final TextView actionLabelView;
+    private final TextView actionResultView;
     private final TextView timeView;
     private final TextView speedView;
     private final SeekBar scrubber;
@@ -79,16 +87,62 @@ class NativeVideoReviewView extends FrameLayout {
         playerView.setUseController(false);
         addView(playerView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
+        LinearLayout scoreStrip = new LinearLayout(context);
+        scoreStrip.setOrientation(LinearLayout.HORIZONTAL);
+        scoreStrip.setGravity(Gravity.CENTER);
+        scoreStrip.setPadding(dp(18), dp(10), dp(18), dp(10));
+        scoreStrip.setBackgroundColor(Color.argb(220, 0, 0, 0));
+        leftScoreView = label(context, 18, Color.rgb(0, 199, 255));
+        leftScoreView.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        leftScoreView.setTypeface(Typeface.DEFAULT_BOLD);
+        timerView = label(context, 22, Color.rgb(255, 210, 80));
+        timerView.setGravity(Gravity.CENTER);
+        timerView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        rightScoreView = label(context, 18, Color.rgb(255, 58, 24));
+        rightScoreView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        rightScoreView.setTypeface(Typeface.DEFAULT_BOLD);
+        scoreStrip.addView(leftScoreView, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        scoreStrip.addView(timerView, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        scoreStrip.addView(rightScoreView, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        addView(scoreStrip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP));
+
         LinearLayout top = new LinearLayout(context);
         top.setOrientation(LinearLayout.VERTICAL);
-        top.setPadding(dp(14), dp(10), dp(14), dp(8));
+        top.setPadding(dp(14), dp(8), dp(14), dp(8));
         top.setBackgroundColor(Color.argb(210, 0, 0, 0));
         titleView = label(context, 18, Color.WHITE);
         timeView = label(context, 13, Color.rgb(210, 216, 232));
         top.addView(titleView);
         top.addView(timeView);
         LayoutParams topParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP);
+        topParams.topMargin = dp(50);
         addView(top, topParams);
+
+        LinearLayout actionCard = new LinearLayout(context);
+        actionCard.setOrientation(LinearLayout.VERTICAL);
+        actionCard.setGravity(Gravity.CENTER);
+        actionCard.setPadding(dp(28), dp(18), dp(28), dp(18));
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(Color.argb(205, 0, 0, 0));
+        cardBg.setCornerRadius(dp(14));
+        cardBg.setStroke(dp(3), Color.rgb(255, 210, 80));
+        actionCard.setBackground(cardBg);
+        actionSideView = label(context, 13, Color.rgb(255, 210, 80));
+        actionSideView.setGravity(Gravity.CENTER);
+        actionSideView.setTypeface(Typeface.DEFAULT_BOLD);
+        actionLabelView = label(context, 30, Color.WHITE);
+        actionLabelView.setGravity(Gravity.CENTER);
+        actionLabelView.setTypeface(Typeface.DEFAULT_BOLD);
+        actionResultView = label(context, 17, Color.rgb(255, 210, 80));
+        actionResultView.setGravity(Gravity.CENTER);
+        actionResultView.setTypeface(Typeface.DEFAULT_BOLD);
+        actionCard.addView(actionSideView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        actionCard.addView(actionLabelView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        actionCard.addView(actionResultView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        LayoutParams actionParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        actionParams.leftMargin = dp(18);
+        actionParams.rightMargin = dp(18);
+        addView(actionCard, actionParams);
 
         LinearLayout bottom = new LinearLayout(context);
         bottom.setOrientation(LinearLayout.VERTICAL);
@@ -209,6 +263,14 @@ class NativeVideoReviewView extends FrameLayout {
             playbackRate = payload.optDouble("playbackRate", 0.5);
 
             titleView.setText(payload.optString("title", "Video Review"));
+            leftScoreView.setText(payload.optString("leftSummary", "LEFT 0"));
+            timerView.setText(payload.optString("timerText", "--:--"));
+            rightScoreView.setText(payload.optString("rightSummary", "0 RIGHT"));
+            actionSideView.setText(payload.optString("actionSideLabel", "ACTION"));
+            actionLabelView.setText(payload.optString("actionLabel", "REVIEW"));
+            actionResultView.setText(payload.optString("resultLabel", ""));
+            int accent = "R".equals(payload.optString("side", "")) ? Color.rgb(255, 58, 24) : Color.rgb(0, 199, 255);
+            actionSideView.setTextColor(accent);
 
             if (player == null) {
                 player = new ExoPlayer.Builder(getContext()).build();

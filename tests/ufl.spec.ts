@@ -513,6 +513,12 @@ test.describe('native video review', () => {
     expect(payload.clipEnd).toBe(14);
     expect(payload.playbackRate).toBe(0.5);
     expect(payload.title).toContain('POINT IN LINE');
+    expect(payload.actionSideLabel).toBe('RIGHT ACTION');
+    expect(payload.actionLabel).toBe('POINT IN LINE');
+    expect(payload.resultLabel).toBe('OFF TARGET');
+    expect(payload.leftSummary).toBe('LEFT 1');
+    expect(payload.rightSummary).toBe('0 RIGHT');
+    expect(payload.timerText).toBe('2:48  P1');
   });
 
   test('review keep and correction preserve audit fields and recompute score', async ({ page }) => {
