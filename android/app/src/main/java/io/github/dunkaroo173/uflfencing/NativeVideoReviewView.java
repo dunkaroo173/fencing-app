@@ -21,6 +21,8 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+import java.util.Locale;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 class NativeVideoReviewView extends FrameLayout {
@@ -265,15 +267,7 @@ class NativeVideoReviewView extends FrameLayout {
             clipEndSec = Math.max(clipStartSec + 0.5, clipEndSec);
             playbackRate = payload.optDouble("playbackRate", 0.5);
 
-            titleView.setText(payload.optString("title", "Video Review"));
-            leftScoreView.setText(payload.optString("leftSummary", "LEFT 0"));
-            timerView.setText(payload.optString("timerText", "--:--"));
-            rightScoreView.setText(payload.optString("rightSummary", "0 RIGHT"));
-            actionSideView.setText(payload.optString("actionSideLabel", "ACTION"));
-            actionLabelView.setText(payload.optString("actionLabel", "REVIEW"));
-            actionResultView.setText(payload.optString("resultLabel", ""));
-            int accent = "R".equals(payload.optString("side", "")) ? Color.rgb(255, 58, 24) : Color.rgb(0, 199, 255);
-            actionSideView.setTextColor(accent);
+            applyReviewContext(payload);
 
             if (player == null) {
                 player = new ExoPlayer.Builder(getContext()).build();
@@ -372,10 +366,102 @@ class NativeVideoReviewView extends FrameLayout {
     }
 
     private void updateSpeedButtons() {
-        speedView.setText(String.format(java.util.Locale.US, " %.2fx", playbackRate));
+        speedView.setText(String.format(Locale.US, " %.2fx", playbackRate));
         speed025Button.setTextColor(playbackRate == 0.25 ? Color.rgb(245, 200, 66) : Color.WHITE);
         speed05Button.setTextColor(playbackRate == 0.5 ? Color.rgb(245, 200, 66) : Color.WHITE);
         speed1Button.setTextColor(playbackRate == 1.0 ? Color.rgb(245, 200, 66) : Color.WHITE);
+    }
+
+    private void applyReviewContext(JSONObject payload) {
+        JSONObject match = payload.optJSONObject("match");
+        JSONObject event = eventAt(match, eventIndex);
+        if (match != null && event != null) {
+            ReviewState state = reviewStateAt(match, event);
+            String nameL = match.optString("nameL", "LEFT");
+            String nameR = match.optString("nameR", "RIGHT");
+            String side = event.optString("side", payload.optString("side", ""));
+            String sideName = "R".equals(side) ? nameR : "L".equals(side) ? nameL : "REF";
+            String result = event.optBoolean("isHit", false) ? "HIT" : "C".equals(side) ? "NO TOUCH" : "OFF TARGET";
+            String action = event.optString("label", "Review").toUpperCase(Locale.US);
+            String status = event.optString("reviewStatus", event.optBoolean("reviewed", false) ? "confirmed" : "pending").toUpperCase(Locale.US);
+            titleView.setText(String.format(Locale.US, "#%d %s - %s", eventIndex + 1, action, status));
+            leftScoreView.setText(String.format(Locale.US, "%s %d", nameL, state.scoreL));
+            timerView.setText(String.format(Locale.US, "%s  P%d", formatTimer(state.timerSec), state.period));
+            rightScoreView.setText(String.format(Locale.US, "%d %s", state.scoreR, nameR));
+            actionSideView.setText(String.format(Locale.US, "%s ACTION", sideName).toUpperCase(Locale.US));
+            actionLabelView.setText(action);
+            actionResultView.setText(result);
+            actionSideView.setTextColor("R".equals(side) ? Color.rgb(255, 58, 24) : Color.rgb(0, 199, 255));
+            return;
+        }
+
+        titleView.setText(payload.optString("title", "Video Review"));
+        leftScoreView.setText(payload.optString("leftSummary", "LEFT 0"));
+        timerView.setText(payload.optString("timerText", "--:--"));
+        rightScoreView.setText(payload.optString("rightSummary", "0 RIGHT"));
+        actionSideView.setText(payload.optString("actionSideLabel", "ACTION"));
+        actionLabelView.setText(payload.optString("actionLabel", "REVIEW"));
+        actionResultView.setText(payload.optString("resultLabel", ""));
+        int accent = "R".equals(payload.optString("side", "")) ? Color.rgb(255, 58, 24) : Color.rgb(0, 199, 255);
+        actionSideView.setTextColor(accent);
+    }
+
+    private JSONObject eventAt(JSONObject match, int index) {
+        if (match == null || index < 0) return null;
+        JSONArray events = match.optJSONArray("events");
+        if (events == null || index >= events.length()) return null;
+        return events.optJSONObject(index);
+    }
+
+    private ReviewState reviewStateAt(JSONObject match, JSONObject targetEvent) {
+        ReviewState state = new ReviewState();
+        String nameL = match.optString("nameL", "LEFT");
+        String nameR = match.optString("nameR", "RIGHT");
+        double periodDuration = Math.max(1.0, match.optDouble("periodDuration", 180.0));
+        double targetTime = eventBoutTime(match, targetEvent);
+        state.period = Math.max(1, (int) Math.floor(targetTime / periodDuration) + 1);
+        double periodElapsed = Math.max(0.0, targetTime - (state.period - 1) * periodDuration);
+        state.timerSec = (int) Math.max(0, periodDuration - Math.floor(periodElapsed));
+
+        JSONArray events = match.optJSONArray("events");
+        if (events != null) {
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject ev = events.optJSONObject(i);
+                if (ev == null || eventBoutTime(match, ev) > targetTime + 0.001) continue;
+                applyScore(state, ev);
+            }
+        }
+        if (nameL.length() == 0 || nameR.length() == 0) return state;
+        return state;
+    }
+
+    private void applyScore(ReviewState state, JSONObject ev) {
+        String side = ev.optString("side", "");
+        int actionId = ev.optInt("actionId", 0);
+        if (ev.optBoolean("isHit", false)) {
+            if ("L".equals(side)) state.scoreL++;
+            if ("R".equals(side)) state.scoreR++;
+        }
+        if (actionId == 191) state.scoreR++;
+        if (actionId == 291) state.scoreL++;
+    }
+
+    private double eventBoutTime(JSONObject match, JSONObject ev) {
+        double periodDuration = Math.max(0.0, match.optDouble("periodDuration", 0.0));
+        int period = Math.max(1, ev.optInt("period", 1));
+        return (period - 1) * periodDuration + Math.max(0.0, ev.optDouble("ts", 0.0));
+    }
+
+    private static String formatTimer(int totalSeconds) {
+        int seconds = Math.max(0, totalSeconds);
+        return String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60);
+    }
+
+    private static class ReviewState {
+        int scoreL = 0;
+        int scoreR = 0;
+        int timerSec = 0;
+        int period = 1;
     }
 
     private double currentSec() {

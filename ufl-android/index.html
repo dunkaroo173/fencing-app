@@ -2578,9 +2578,7 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
   const eventVideoTime = boutTimeToVideoTime(eventBoutTime, source.timeOffset, source.useRecordingPauses);
   const clipStart = Math.max(0, eventVideoTime - 5);
   const clipEnd = source.durationSec > 0 ? Math.min(source.durationSec, eventVideoTime + 2) : eventVideoTime + 2;
-  const reviewState = replayStateAt(eventBoutTime, M.events);
-  const sideName = ev.side === 'R' ? M.nameR : ev.side === 'L' ? M.nameL : 'REF';
-  const resultLabel = ev.isHit ? 'HIT' : ev.side === 'C' ? 'NO TOUCH' : 'OFF TARGET';
+  const match = snapshotMatchForOverlay(M);
   stopTimer();
   closeDrawer();
   try {
@@ -2593,14 +2591,8 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
       clipEnd,
       durationSec: source.durationSec,
       playbackRate: ev.videoReview && ev.videoReview.playbackRate ? ev.videoReview.playbackRate : 0.5,
+      match,
       title: eventReviewTitle(ev, index),
-      side: ev.side,
-      actionSideLabel: `${sideName} ACTION`,
-      actionLabel: String(ev.label || 'Review').toUpperCase(),
-      resultLabel,
-      leftSummary: `${M.nameL} ${reviewState.scoreL}`,
-      rightSummary: `${reviewState.scoreR} ${M.nameR}`,
-      timerText: `${fmtTime(reviewState.timerSec)}  P${reviewState.period}`,
     }));
   } catch (err) {
     setOverlayStatus(err && err.message ? err.message : 'Could not start video review.', false);
