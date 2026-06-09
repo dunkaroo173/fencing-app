@@ -163,6 +163,7 @@ class NativeVideoReviewView extends FrameLayout {
         Button fwd2 = button(context, "+2s");
         playButton = button(context, "PLAY");
         Button replay = button(context, "REPLAY");
+        Button jumpAction = button(context, "ACTION");
         speed025Button = button(context, "0.25x");
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
@@ -172,6 +173,7 @@ class NativeVideoReviewView extends FrameLayout {
         controls.addView(back1);
         controls.addView(playButton);
         controls.addView(replay);
+        controls.addView(jumpAction);
         controls.addView(fwd1);
         controls.addView(fwd2);
         controls.addView(speed025Button);
@@ -221,6 +223,7 @@ class NativeVideoReviewView extends FrameLayout {
 
         playButton.setOnClickListener(v -> togglePlay());
         replay.setOnClickListener(v -> replay());
+        jumpAction.setOnClickListener(v -> jumpToAction());
         back2.setOnClickListener(v -> shift(-2));
         back1.setOnClickListener(v -> shift(-1));
         fwd1.setOnClickListener(v -> shift(1));
@@ -327,6 +330,12 @@ class NativeVideoReviewView extends FrameLayout {
         if (player == null) return;
         player.seekTo(secondsToMs(clipStartSec));
         player.play();
+    }
+
+    private void jumpToAction() {
+        if (player == null) return;
+        player.seekTo(secondsToMs(clamp(eventTimeSec, clipStartSec, clipEndSec)));
+        syncUi();
     }
 
     private void shift(double deltaSec) {
