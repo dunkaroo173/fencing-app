@@ -51,9 +51,11 @@ class NativeVideoReviewView extends FrameLayout {
     private final TextView speedView;
     private final SeekBar scrubber;
     private final Button playButton;
+    private final Button moreButton;
     private final Button speed025Button;
     private final Button speed05Button;
     private final Button speed1Button;
+    private final LinearLayout advancedControls;
 
     private ExoPlayer player;
     private Callback callback;
@@ -92,15 +94,15 @@ class NativeVideoReviewView extends FrameLayout {
         LinearLayout scoreStrip = new LinearLayout(context);
         scoreStrip.setOrientation(LinearLayout.HORIZONTAL);
         scoreStrip.setGravity(Gravity.CENTER);
-        scoreStrip.setPadding(dp(18), dp(10), dp(18), dp(10));
-        scoreStrip.setBackgroundColor(Color.argb(220, 0, 0, 0));
-        leftScoreView = label(context, 18, Color.rgb(0, 199, 255));
+        scoreStrip.setPadding(dp(14), dp(5), dp(14), dp(5));
+        scoreStrip.setBackgroundColor(Color.argb(175, 0, 0, 0));
+        leftScoreView = label(context, 15, Color.rgb(0, 199, 255));
         leftScoreView.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
         leftScoreView.setTypeface(Typeface.DEFAULT_BOLD);
-        timerView = label(context, 22, Color.rgb(255, 210, 80));
+        timerView = label(context, 18, Color.rgb(255, 210, 80));
         timerView.setGravity(Gravity.CENTER);
         timerView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        rightScoreView = label(context, 18, Color.rgb(255, 58, 24));
+        rightScoreView = label(context, 15, Color.rgb(255, 58, 24));
         rightScoreView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
         rightScoreView.setTypeface(Typeface.DEFAULT_BOLD);
         scoreStrip.addView(leftScoreView, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
@@ -110,94 +112,99 @@ class NativeVideoReviewView extends FrameLayout {
 
         LinearLayout top = new LinearLayout(context);
         top.setOrientation(LinearLayout.VERTICAL);
-        top.setPadding(dp(14), dp(8), dp(14), dp(8));
-        top.setBackgroundColor(Color.argb(210, 0, 0, 0));
-        titleView = label(context, 18, Color.WHITE);
-        timeView = label(context, 13, Color.rgb(210, 216, 232));
+        top.setPadding(dp(14), dp(5), dp(14), dp(5));
+        top.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        titleView = label(context, 13, Color.WHITE);
+        timeView = label(context, 11, Color.rgb(210, 216, 232));
         top.addView(titleView);
         top.addView(timeView);
         LayoutParams topParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP);
-        topParams.topMargin = dp(50);
+        topParams.topMargin = dp(34);
         addView(top, topParams);
 
         LinearLayout actionCard = new LinearLayout(context);
         actionCard.setOrientation(LinearLayout.VERTICAL);
         actionCard.setGravity(Gravity.CENTER);
-        actionCard.setPadding(dp(28), dp(18), dp(28), dp(18));
+        actionCard.setPadding(dp(18), dp(7), dp(18), dp(7));
         GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(Color.argb(205, 0, 0, 0));
-        cardBg.setCornerRadius(dp(14));
-        cardBg.setStroke(dp(3), Color.rgb(255, 210, 80));
+        cardBg.setColor(Color.argb(170, 0, 0, 0));
+        cardBg.setCornerRadius(dp(10));
+        cardBg.setStroke(dp(2), Color.rgb(255, 210, 80));
         actionCard.setBackground(cardBg);
-        actionSideView = label(context, 13, Color.rgb(255, 210, 80));
+        actionSideView = label(context, 11, Color.rgb(255, 210, 80));
         actionSideView.setGravity(Gravity.CENTER);
         actionSideView.setTypeface(Typeface.DEFAULT_BOLD);
-        actionLabelView = label(context, 30, Color.WHITE);
+        actionLabelView = label(context, 20, Color.WHITE);
         actionLabelView.setGravity(Gravity.CENTER);
         actionLabelView.setTypeface(Typeface.DEFAULT_BOLD);
-        actionResultView = label(context, 17, Color.rgb(255, 210, 80));
+        actionResultView = label(context, 13, Color.rgb(255, 210, 80));
         actionResultView.setGravity(Gravity.CENTER);
         actionResultView.setTypeface(Typeface.DEFAULT_BOLD);
         actionCard.addView(actionSideView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         actionCard.addView(actionLabelView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         actionCard.addView(actionResultView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        LayoutParams actionParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        actionParams.leftMargin = dp(18);
-        actionParams.rightMargin = dp(18);
+        LayoutParams actionParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP);
+        actionParams.topMargin = dp(94);
+        actionParams.leftMargin = dp(46);
+        actionParams.rightMargin = dp(46);
         addView(actionCard, actionParams);
 
         LinearLayout bottom = new LinearLayout(context);
         bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setPadding(dp(14), dp(8), dp(14), dp(10));
-        bottom.setBackgroundColor(Color.argb(225, 0, 0, 0));
+        bottom.setPadding(dp(12), dp(5), dp(12), dp(7));
+        bottom.setBackgroundColor(Color.argb(190, 0, 0, 0));
 
         scrubber = new SeekBar(context);
         scrubber.setMax(1000);
         bottom.addView(scrubber, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(34)));
 
-        LinearLayout controls = new LinearLayout(context);
-        controls.setGravity(Gravity.CENTER);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout primaryControls = new LinearLayout(context);
+        primaryControls.setGravity(Gravity.CENTER);
+        primaryControls.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button replay = button(context, "REPLAY");
+        Button keep = button(context, "KEEP");
+        Button edit = button(context, "EDIT");
+        moreButton = button(context, "MORE");
+        Button close = button(context, "CLOSE");
+        primaryControls.addView(replay);
+        primaryControls.addView(keep);
+        primaryControls.addView(edit);
+        primaryControls.addView(moreButton);
+        primaryControls.addView(close);
+        bottom.addView(primaryControls);
+
+        advancedControls = new LinearLayout(context);
+        advancedControls.setGravity(Gravity.CENTER);
+        advancedControls.setOrientation(LinearLayout.HORIZONTAL);
+        advancedControls.setVisibility(GONE);
 
         Button back2 = button(context, "-2s");
         Button back1 = button(context, "-1s");
         Button fwd1 = button(context, "+1s");
         Button fwd2 = button(context, "+2s");
         playButton = button(context, "PLAY");
-        Button replay = button(context, "REPLAY");
         Button jumpAction = button(context, "ACTION");
         speed025Button = button(context, "0.25x");
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
         speedView = label(context, 12, Color.rgb(245, 200, 66));
-
-        controls.addView(back2);
-        controls.addView(back1);
-        controls.addView(playButton);
-        controls.addView(replay);
-        controls.addView(jumpAction);
-        controls.addView(fwd1);
-        controls.addView(fwd2);
-        controls.addView(speed025Button);
-        controls.addView(speed05Button);
-        controls.addView(speed1Button);
-        controls.addView(speedView);
-        bottom.addView(controls);
-
-        LinearLayout decisions = new LinearLayout(context);
-        decisions.setGravity(Gravity.CENTER);
-        decisions.setOrientation(LinearLayout.HORIZONTAL);
         Button previous = button(context, "PREV");
-        Button keep = button(context, "KEEP");
-        Button edit = button(context, "EDIT");
         Button next = button(context, "NEXT");
-        Button close = button(context, "CLOSE");
-        decisions.addView(previous);
-        decisions.addView(keep);
-        decisions.addView(edit);
-        decisions.addView(next);
-        decisions.addView(close);
-        bottom.addView(decisions);
+
+        advancedControls.addView(back2);
+        advancedControls.addView(back1);
+        advancedControls.addView(playButton);
+        advancedControls.addView(jumpAction);
+        advancedControls.addView(fwd1);
+        advancedControls.addView(fwd2);
+        advancedControls.addView(speed025Button);
+        advancedControls.addView(speed05Button);
+        advancedControls.addView(speed1Button);
+        advancedControls.addView(previous);
+        advancedControls.addView(next);
+        advancedControls.addView(speedView);
+        bottom.addView(advancedControls);
 
         LayoutParams bottomParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
         addView(bottom, bottomParams);
@@ -225,6 +232,7 @@ class NativeVideoReviewView extends FrameLayout {
 
         playButton.setOnClickListener(v -> togglePlay());
         replay.setOnClickListener(v -> replay());
+        moreButton.setOnClickListener(v -> toggleMoreControls());
         jumpAction.setOnClickListener(v -> jumpToAction());
         back2.setOnClickListener(v -> shift(-2));
         back1.setOnClickListener(v -> shift(-1));
@@ -284,6 +292,8 @@ class NativeVideoReviewView extends FrameLayout {
             player.setPlaybackParameters(new PlaybackParameters((float) playbackRate));
             player.seekTo(secondsToMs(clipStartSec));
             setVisibility(VISIBLE);
+            advancedControls.setVisibility(GONE);
+            moreButton.setText("MORE");
             updateSpeedButtons();
             handler.removeCallbacks(ticker);
             handler.post(ticker);
@@ -324,6 +334,12 @@ class NativeVideoReviewView extends FrameLayout {
         if (player == null) return;
         player.seekTo(secondsToMs(clipStartSec));
         player.play();
+    }
+
+    private void toggleMoreControls() {
+        boolean show = advancedControls.getVisibility() != VISIBLE;
+        advancedControls.setVisibility(show ? VISIBLE : GONE);
+        moreButton.setText(show ? "LESS" : "MORE");
     }
 
     private void jumpToAction() {
