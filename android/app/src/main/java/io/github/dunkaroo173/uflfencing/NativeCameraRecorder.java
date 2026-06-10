@@ -115,10 +115,6 @@ class NativeCameraRecorder {
         }
     }
 
-    void updateOverlay(String matchJson) {
-        // Review uses raw footage. The final export renders match graphics separately.
-    }
-
     void clearPreview() {
         if (recording != null) return;
         activity.runOnUiThread(() -> previewView.setVisibility(View.GONE));

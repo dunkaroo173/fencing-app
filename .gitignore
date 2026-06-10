@@ -9,3 +9,10 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Local device-testing artifacts (screenshots / sample exports in the repo root)
+/IMG_*.mp4
+/IMG_*_preview.png
+/pixel-*.png
+/ufl-raw-*.png
+/android/.idea/

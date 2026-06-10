@@ -17,10 +17,12 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.ui.PlayerView;
 import java.util.Locale;
 import org.json.JSONArray;
@@ -62,6 +64,7 @@ class NativeVideoReviewView extends FrameLayout {
     private final Button keepButton;
     private final Button markButton;
     private final LinearLayout advancedControls;
+    private final LinearLayout topPanel;
 
     private ExoPlayer player;
     private Callback callback;
@@ -119,18 +122,18 @@ class NativeVideoReviewView extends FrameLayout {
         scoreStrip.addView(rightScoreView, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         addView(scoreStrip, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
-        LinearLayout top = new LinearLayout(context);
-        top.setOrientation(LinearLayout.VERTICAL);
-        top.setPadding(dp(14), dp(5), dp(14), dp(5));
-        top.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        topPanel = new LinearLayout(context);
+        topPanel.setOrientation(LinearLayout.VERTICAL);
+        topPanel.setPadding(dp(14), dp(5), dp(14), dp(5));
+        topPanel.setBackgroundColor(Color.argb(150, 0, 0, 0));
         titleView = label(context, 13, Color.WHITE);
         timeView = label(context, 11, Color.rgb(210, 216, 232));
-        top.addView(titleView);
-        top.addView(timeView);
-        top.setVisibility(GONE);
+        topPanel.addView(titleView);
+        topPanel.addView(timeView);
+        topPanel.setVisibility(GONE);
         LayoutParams topParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP);
         topParams.topMargin = dp(34);
-        addView(top, topParams);
+        addView(topPanel, topParams);
 
         actionCard = new LinearLayout(context);
         actionCard.setOrientation(LinearLayout.VERTICAL);
@@ -207,12 +210,12 @@ class NativeVideoReviewView extends FrameLayout {
 
         LinearLayout seekRow = controlRow(context, "NUDGE");
         Button back2 = button(context, "-2s", Color.rgb(54, 125, 160));
-        Button back1 = button(context, "-1s", Color.rgb(54, 125, 160));
-        Button fwd1 = button(context, "+1s", Color.rgb(54, 125, 160));
+        Button backFrame = button(context, "-1 fr", Color.rgb(54, 125, 160));
+        Button fwdFrame = button(context, "+1 fr", Color.rgb(54, 125, 160));
         Button fwd2 = button(context, "+2s", Color.rgb(54, 125, 160));
         seekRow.addView(back2);
-        seekRow.addView(back1);
-        seekRow.addView(fwd1);
+        seekRow.addView(backFrame);
+        seekRow.addView(fwdFrame);
         seekRow.addView(fwd2);
 
         LinearLayout actionRow = controlRow(context, "ACTION");
@@ -253,8 +256,8 @@ class NativeVideoReviewView extends FrameLayout {
         replay.setOnClickListener(v -> replay());
         moreButton.setOnClickListener(v -> toggleMoreControls());
         back2.setOnClickListener(v -> shift(-2));
-        back1.setOnClickListener(v -> shift(-1));
-        fwd1.setOnClickListener(v -> shift(1));
+        backFrame.setOnClickListener(v -> shift(-frameDurationSec()));
+        fwdFrame.setOnClickListener(v -> shift(frameDurationSec()));
         fwd2.setOnClickListener(v -> shift(2));
         speed025Button.setOnClickListener(v -> setPlaybackRate(0.25));
         speed05Button.setOnClickListener(v -> setPlaybackRate(0.5));
@@ -300,11 +303,13 @@ class NativeVideoReviewView extends FrameLayout {
             markButton.setVisibility(annotateMode ? VISIBLE : GONE);
             overturnButton.setVisibility(annotateMode ? GONE : VISIBLE);
             keepButton.setVisibility(annotateMode ? GONE : VISIBLE);
+            topPanel.setVisibility(payload.optString("progressText", "").isEmpty() ? GONE : VISIBLE);
 
             applyReviewContext(payload);
 
             if (player == null) {
                 player = new ExoPlayer.Builder(getContext()).build();
+                player.setSeekParameters(SeekParameters.EXACT); // frame stepping needs exact seeks
                 playerView.setPlayer(player);
                 player.addListener(new Player.Listener() {
                     @Override
@@ -376,6 +381,14 @@ class NativeVideoReviewView extends FrameLayout {
         syncUi();
     }
 
+    private double frameDurationSec() {
+        if (player != null) {
+            Format format = player.getVideoFormat();
+            if (format != null && format.frameRate > 0) return 1.0 / format.frameRate;
+        }
+        return 1.0 / 30.0;
+    }
+
     private void setPlaybackRate(double rate) {
         playbackRate = rate;
         if (player != null) {
@@ -409,6 +422,8 @@ class NativeVideoReviewView extends FrameLayout {
     }
 
     private void applyReviewContext(JSONObject payload) {
+        String progressText = payload.optString("progressText", "");
+        String progressSuffix = progressText.isEmpty() ? "" : "  |  " + progressText;
         JSONObject match = payload.optJSONObject("match");
         JSONObject event = eventAt(match, eventIndex);
         if (match != null && event != null) {
@@ -420,7 +435,7 @@ class NativeVideoReviewView extends FrameLayout {
             String result = event.optBoolean("isHit", false) ? "HIT" : "C".equals(side) ? "NO TOUCH" : "OFF TARGET";
             String action = event.optString("label", "Review").toUpperCase(Locale.US);
             String status = event.optString("reviewStatus", event.optBoolean("reviewed", false) ? "confirmed" : "pending").toUpperCase(Locale.US);
-            titleView.setText(String.format(Locale.US, "#%d %s - %s", eventIndex + 1, action, status));
+            titleView.setText(String.format(Locale.US, "#%d %s - %s%s", eventIndex + 1, action, status, progressSuffix));
             leftScoreView.setText(String.format(Locale.US, "%s %d", nameL, state.scoreL));
             timerView.setText(String.format(Locale.US, "%s  P%d", formatTimer(state.timerSec), state.period));
             rightScoreView.setText(String.format(Locale.US, "%d %s", state.scoreR, nameR));
@@ -431,7 +446,7 @@ class NativeVideoReviewView extends FrameLayout {
             return;
         }
 
-        titleView.setText(payload.optString("title", "Video Review"));
+        titleView.setText(payload.optString("title", "Video Review") + progressSuffix);
         leftScoreView.setText(payload.optString("leftSummary", "LEFT 0"));
         timerView.setText(payload.optString("timerText", "--:--"));
         rightScoreView.setText(payload.optString("rightSummary", "0 RIGHT"));

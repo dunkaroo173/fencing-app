@@ -1169,6 +1169,50 @@ test.describe('native video review', () => {
     expect(result.payloads).toBe(1);
     expect(result.editId).toBeNull();
   });
+
+  test('review payload carries progress over reviewable events', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const payload = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true },
+        { ts: 12, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 12, period: 1, side: 'C', actionId: 3, label: 'Video Review', emoji: 'V', isHit: false },
+      ];
+      (window as any).startVideoReviewForIndex(1);
+      return (window as any).__reviewPayload;
+    });
+
+    expect(payload.progressText).toBe('Event 2 of 2 - 1 reviewed');
+  });
+
+  test('malformed recording pauses are dropped from export payloads', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const good = { startVideo: 5, endVideo: 8, boutTime: 4 };
+      const inverted = { startVideo: 9, endVideo: 2, boutTime: 6 };
+      const unfinished = { startVideo: 11, boutTime: 10 };
+      M.recordingPauses = [good, inverted, unfinished];
+      const payload = (window as any).nativeOverlayPayload('recorded', 'content://recorded/x.mp4', {
+        segments: [{ uri: 'content://recorded/x.mp4', durationMs: 10000, startBoutTs: 0, pauses: [inverted, good, unfinished] }],
+      });
+      return {
+        matchPauses: payload.match.recordingPauses,
+        segmentPauses: payload.segments[0].pauses,
+      };
+    });
+
+    expect(result.matchPauses).toEqual([{ startVideo: 5, endVideo: 8, boutTime: 4 }]);
+    expect(result.segmentPauses).toEqual([{ startVideo: 5, endVideo: 8, boutTime: 4 }]);
+  });
 });
 
 test.describe('import annotation workbench', () => {

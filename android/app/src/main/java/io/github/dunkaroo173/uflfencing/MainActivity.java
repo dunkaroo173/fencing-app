@@ -245,10 +245,6 @@ public class MainActivity extends AppCompatActivity {
         if (nativeCameraRecorder != null) nativeCameraRecorder.stop(matchJson);
     }
 
-    void updateNativeRecordingOverlay(String matchJson) {
-        if (nativeCameraRecorder != null) nativeCameraRecorder.updateOverlay(matchJson);
-    }
-
     void clearNativeRecordingPreview() {
         if (nativeCameraRecorder != null) nativeCameraRecorder.clearPreview();
     }

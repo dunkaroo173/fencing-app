@@ -84,6 +84,7 @@ body.android-native-preview .operate::before{content:"";position:absolute;inset:
 body.android-native-preview .hud{background:rgba(0,0,0,0.96);box-shadow:0 8px 30px rgba(0,0,0,0.75)}
 body.android-native-preview .cards-strip,
 body.android-native-preview .hint-pill,
+body.android-native-preview .rec-dot,
 body.android-native-preview .act-btn,
 body.android-native-preview .sec-btn,
 body.android-native-preview .mid-btn,
@@ -331,6 +332,7 @@ body.android-native-preview #import-preview{display:none!important}
     <div class="rec-dot" id="rec-dot">
       <div class="rec-circle"></div>
       <div class="rec-label">REC</div>
+      <div class="rec-label" id="rec-time"></div>
     </div>
     <!-- Camera button -->
     <button class="cam-btn" id="cam-btn">📷</button>
@@ -1556,7 +1558,6 @@ let _nativeRecordedPayload = null;
 let _nativeRecordingReady = false;
 let _nativeRecordingActive = false;
 let _nativePendingRecordingStartBoutElapsed = null;
-let _nativeOverlayTimer = null;
 let _nativeRecordingReadyPromise = null;
 let _nativeRecordingReadyResolver = null;
 let _reviewEditId = null;
@@ -1623,7 +1624,7 @@ function showCamError(msg) {
 
 function resetCamUI() {
   if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
-  stopNativeOverlayTimer();
+  stopRecTimeTicker();
   _recCanvas = null;
   _recCtx    = null;
   _recCanvasTrack = null;
@@ -1787,25 +1788,6 @@ function nativeRecordingMatchJson() {
   return JSON.stringify(snapshotMatchForOverlay(M));
 }
 
-function syncNativeRecordingOverlay() {
-  if (!isAndroidNativeRecordingAvailable() || !_nativeRecordingActive) return;
-  try {
-    AndroidVideo.updateNativeRecordingOverlay(nativeRecordingMatchJson());
-  } catch (_) {}
-}
-
-function startNativeOverlayTimer() {
-  stopNativeOverlayTimer();
-  _nativeOverlayTimer = setInterval(syncNativeRecordingOverlay, 250);
-}
-
-function stopNativeOverlayTimer() {
-  if (_nativeOverlayTimer) {
-    clearInterval(_nativeOverlayTimer);
-    _nativeOverlayTimer = null;
-  }
-}
-
 function updateImportedVideoModeUI() {
   const camBtn = document.getElementById('cam-btn');
   if (camBtn) camBtn.style.display = isImportedVideoAnnotationMode() ? 'none' : 'flex';
@@ -1890,7 +1872,6 @@ function noteRecordingClockPause() {
     startVideo: recordingVideoElapsed(),
     boutTime: currentBoutElapsed(),
   };
-  syncNativeRecordingOverlay();
 }
 
 function noteRecordingClockResume() {
@@ -1899,7 +1880,16 @@ function noteRecordingClockResume() {
   ensureRecordingPauses().push(_recPauseOpen);
   _recPauseOpen = null;
   if (typeof scheduleSave === 'function') scheduleSave();
-  syncNativeRecordingOverlay();
+}
+
+// Drop malformed pause spans before they reach the time-mapping code and the
+// native exporters: each needs finite start/end video times in order.
+function sanitizeRecordingPauses(pauses) {
+  if (!Array.isArray(pauses)) return [];
+  return pauses.filter(p => p &&
+    Number.isFinite(Number(p.startVideo)) &&
+    Number.isFinite(Number(p.endVideo)) &&
+    Number(p.endVideo) > Number(p.startVideo));
 }
 
 function rememberRecordingSegment(payload) {
@@ -1912,7 +1902,7 @@ function rememberRecordingSegment(payload) {
     displayName: payload.displayName || 'recording.mp4',
     durationMs,
     startBoutTs: Number(_recBoutStart) || 0,
-    pauses: Array.isArray(M.recordingPauses) ? M.recordingPauses.map(p => ({ ...p })) : [],
+    pauses: sanitizeRecordingPauses(Array.isArray(M.recordingPauses) ? M.recordingPauses.map(p => ({ ...p })) : []),
     sourceType: 'recorded',
   };
   M.recordingSegments.push(segment);
@@ -2203,11 +2193,33 @@ function recomputeMatchScoreFromEvents() {
   refreshHUD();
 }
 
+let _recTimeTimer = null;
+
+function startRecTimeTicker() {
+  stopRecTimeTicker();
+  const el = document.getElementById('rec-time');
+  if (el) el.textContent = '0:00';
+  _recTimeTimer = setInterval(() => {
+    const tick = document.getElementById('rec-time');
+    if (tick) tick.textContent = fmtTime(recordingVideoElapsed());
+  }, 1000);
+}
+
+function stopRecTimeTicker() {
+  if (_recTimeTimer) {
+    clearInterval(_recTimeTimer);
+    _recTimeTimer = null;
+  }
+  const el = document.getElementById('rec-time');
+  if (el) el.textContent = '';
+}
+
 function markRecordingStart(boutElapsed) {
   _recBoutStart = boutElapsed !== null && boutElapsed !== undefined && Number.isFinite(Number(boutElapsed))
     ? Number(boutElapsed)
     : currentBoutElapsed();
   _recPerfStart = performance.now();
+  startRecTimeTicker();
   _recPauseOpen = null;
   _recDurationSec = 0;
   _nativeRecordedVideo = null;
@@ -2550,6 +2562,9 @@ function overlayFilename(source, ext) {
 
 function nativeOverlayPayload(sourceType, sourceUri, opts = {}) {
   const match = snapshotMatchForOverlay(M);
+  if (match && Array.isArray(match.recordingPauses)) {
+    match.recordingPauses = sanitizeRecordingPauses(match.recordingPauses);
+  }
   const extless = overlayFilename(sourceType, 'mp4').replace(/\.mp4$/, '');
   const payload = {
     sourceType,
@@ -2567,7 +2582,7 @@ function nativeOverlayPayload(sourceType, sourceUri, opts = {}) {
       uri: segment.uri || segment.savedUri,
       durationMs: Math.max(0, Math.round(Number(segment.durationMs || 0))),
       startBoutTs: Number(segment.startBoutTs) || 0,
-      pauses: Array.isArray(segment.pauses) ? segment.pauses : [],
+      pauses: sanitizeRecordingPauses(segment.pauses),
     }));
   }
   return payload;
@@ -3031,6 +3046,10 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
     return false;
   }
   const ev = M.events[index];
+  const reviewable = M.events
+    .filter(e2 => e2 && (e2.side === 'L' || e2.side === 'R'))
+    .sort((a, b) => overlayEventTime(a) - overlayEventTime(b));
+  const progressText = `Event ${reviewable.indexOf(ev) + 1} of ${reviewable.length} - ${reviewable.filter(e2 => e2.reviewed).length} reviewed`;
   const eventBoutTime = overlayEventTime(ev);
   const eventVideoTime = boutTimeToVideoTime(eventBoutTime, source.timeOffset, source.useRecordingPauses, source.pauses);
   const clipStart = Math.max(0, eventVideoTime - 5);
@@ -3056,6 +3075,7 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
       showReviewOverlay: false,
       match,
       title: eventReviewTitle(ev, index),
+      progressText,
     }));
     _nativeReviewMode = 'review';
     return true;
@@ -3188,15 +3208,12 @@ window.onAndroidRecordingStarted = function() {
   _nativeRecordingActive = true;
   markRecordingStart(_nativePendingRecordingStartBoutElapsed);
   _nativePendingRecordingStartBoutElapsed = null;
-  startNativeOverlayTimer();
-  syncNativeRecordingOverlay();
 };
 
 window.onAndroidRecordingStopped = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   _nativeRecordingActive = false;
   _nativePendingRecordingStartBoutElapsed = null;
-  stopNativeOverlayTimer();
   _nativeRecordedPayload = payload;
   _nativeRecordedVideo = payload.uri || payload.savedUri || null;
   _recDurationSec = payload.durationMs ? payload.durationMs / 1000 : recordingVideoElapsed();
@@ -3225,7 +3242,6 @@ window.onAndroidRecordingError = function(payloadJson) {
   _nativeRecordingReadyResolver = null;
   _nativeRecordingActive = false;
   _nativePendingRecordingStartBoutElapsed = null;
-  stopNativeOverlayTimer();
   resetCamUI();
   setOverlayStatus(payload.message || 'Native recording failed', false);
 };

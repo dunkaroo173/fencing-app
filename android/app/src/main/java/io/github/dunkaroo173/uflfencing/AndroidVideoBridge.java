@@ -28,6 +28,9 @@ public class AndroidVideoBridge {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<String, FileOutputStream> sessions = new ConcurrentHashMap<>();
     private final Map<String, File> sessionFiles = new ConcurrentHashMap<>();
+    // Source path -> MediaStore uri, so re-exporting or re-saving the same file
+    // does not create duplicate gallery entries.
+    private final Map<String, String> savedToMediaStore = new ConcurrentHashMap<>();
 
     AndroidVideoBridge(MainActivity activity, WebView webView) {
         this.activity = activity;
@@ -93,9 +96,11 @@ public class AndroidVideoBridge {
     @JavascriptInterface
     public void exportOverlay(String payloadJson) {
         executor.execute(() -> {
+            String errorSourceType = "native";
             try {
                 JSONObject payload = new JSONObject(payloadJson);
                 final String sourceType = payload.optString("sourceType", "native");
+                errorSourceType = sourceType;
                 emitProgress(sourceType, 0, "Preparing native export");
                 NativeOverlayExporter.Callback callback = new NativeOverlayExporter.Callback() {
                     @Override
@@ -104,12 +109,18 @@ public class AndroidVideoBridge {
                     }
                 };
                 NativeOverlayExporter.Result result;
-                boolean hasSegments = payload.optJSONArray("segments") != null && payload.optJSONArray("segments").length() > 0;
+                int segmentCount = payload.optJSONArray("segments") == null ? 0 : payload.optJSONArray("segments").length();
+                boolean hasSegments = segmentCount > 0;
                 if ("imported".equals(sourceType) || hasSegments) {
                     try {
                         result = new Media3OverlayExporter(activity, callback).export(payload);
                     } catch (Exception media3Error) {
-                        if (hasSegments) throw media3Error;
+                        if (hasSegments) {
+                            // The compatibility exporter cannot stitch segments;
+                            // surface an actionable error instead of falling back.
+                            throw new Exception("Stitched export of " + segmentCount + " recording segments failed: "
+                                    + (media3Error.getMessage() == null ? media3Error.toString() : media3Error.getMessage()), media3Error);
+                        }
                         emitProgress(sourceType, 0.03, "Media3 export failed; using compatibility exporter");
                         result = new NativeOverlayExporter(activity, callback).export(payload);
                     }
@@ -118,7 +129,7 @@ public class AndroidVideoBridge {
                 }
                 emitComplete(sourceType, result);
             } catch (Exception e) {
-                emitError("native", e);
+                emitError(errorSourceType, e);
             }
         });
     }
@@ -130,7 +141,7 @@ public class AndroidVideoBridge {
                 Uri uri = Uri.parse(sourceUri);
                 File file = fileFromUri(uri);
                 if (file == null || !file.exists()) throw new IllegalArgumentException("Recording segment is not available");
-                Uri savedUri = saveToMediaStore(file, displayName == null ? file.getName() : displayName);
+                Uri savedUri = saveToMediaStoreOnce(file, displayName == null ? file.getName() : displayName);
                 JSONObject payload = new JSONObject();
                 payload.put("sourceType", "recorded");
                 payload.put("uri", sourceUri);
@@ -157,11 +168,6 @@ public class AndroidVideoBridge {
     @JavascriptInterface
     public void stopNativeRecording(String matchJson) {
         activity.runOnUiThread(() -> activity.stopNativeRecording(matchJson));
-    }
-
-    @JavascriptInterface
-    public void updateNativeRecordingOverlay(String matchJson) {
-        activity.updateNativeRecordingOverlay(matchJson);
     }
 
     @JavascriptInterface
@@ -348,7 +354,7 @@ public class AndroidVideoBridge {
     private void emitComplete(String sourceType, NativeOverlayExporter.Result result) throws Exception {
         JSONObject payload = new JSONObject();
         Uri shareUri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", result.file);
-        Uri savedUri = saveToMediaStore(result.file, result.displayName);
+        Uri savedUri = saveToMediaStoreOnce(result.file, result.displayName);
         payload.put("sourceType", sourceType);
         payload.put("uri", shareUri.toString());
         if (savedUri != null) payload.put("savedUri", savedUri.toString());
@@ -388,6 +394,15 @@ public class AndroidVideoBridge {
             return new File(activity.getCacheDir(), relative);
         }
         return null;
+    }
+
+    private Uri saveToMediaStoreOnce(File file, String displayName) throws Exception {
+        String key = file.getAbsolutePath();
+        String cached = savedToMediaStore.get(key);
+        if (cached != null) return Uri.parse(cached);
+        Uri savedUri = saveToMediaStore(file, displayName);
+        if (savedUri != null) savedToMediaStore.put(key, savedUri.toString());
+        return savedUri;
     }
 
     private Uri saveToMediaStore(File file, String displayName) throws Exception {
