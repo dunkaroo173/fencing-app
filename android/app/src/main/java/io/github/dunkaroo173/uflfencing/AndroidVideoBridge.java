@@ -272,17 +272,18 @@ public class AndroidVideoBridge {
         } catch (Exception ignored) {}
     }
 
-    void onVideoReviewKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
-        emitVideoReviewDecision("window.onAndroidVideoReviewKeep", eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+    void onVideoReviewKeep(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+        emitVideoReviewDecision("window.onAndroidVideoReviewKeep", eventId, eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
     }
 
-    void onVideoReviewEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
-        emitVideoReviewDecision("window.onAndroidVideoReviewEdit", eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+    void onVideoReviewEdit(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+        emitVideoReviewDecision("window.onAndroidVideoReviewEdit", eventId, eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
     }
 
-    void onVideoReviewNavigate(int eventIndex, int direction) {
+    void onVideoReviewNavigate(String eventId, int eventIndex, int direction) {
         try {
             JSONObject payload = new JSONObject();
+            if (eventId != null && !eventId.isEmpty()) payload.put("eventId", eventId);
             payload.put("eventIndex", eventIndex);
             payload.put("direction", direction);
             emit("window.onAndroidVideoReviewNavigate", payload);
@@ -319,10 +320,11 @@ public class AndroidVideoBridge {
         } catch (Exception ignored) {}
     }
 
-    private void emitVideoReviewDecision(String functionName, int eventIndex, double chosenTimeSec,
+    private void emitVideoReviewDecision(String functionName, String eventId, int eventIndex, double chosenTimeSec,
                                          double clipStartSec, double clipEndSec, double playbackRate) {
         try {
             JSONObject payload = new JSONObject();
+            if (eventId != null && !eventId.isEmpty()) payload.put("eventId", eventId);
             payload.put("eventIndex", eventIndex);
             payload.put("chosenTime", chosenTimeSec);
             payload.put("clipStart", clipStartSec);

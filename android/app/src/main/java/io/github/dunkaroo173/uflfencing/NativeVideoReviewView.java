@@ -28,9 +28,9 @@ import org.json.JSONObject;
 
 class NativeVideoReviewView extends FrameLayout {
     interface Callback {
-        void onKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
-        void onEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
-        void onNavigate(int eventIndex, int direction);
+        void onKeep(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
+        void onEdit(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
+        void onNavigate(String eventId, int eventIndex, int direction);
         void onClose();
         void onError(String message);
     }
@@ -61,6 +61,7 @@ class NativeVideoReviewView extends FrameLayout {
 
     private ExoPlayer player;
     private Callback callback;
+    private String eventId = "";
     private int eventIndex = -1;
     private double eventTimeSec;
     private double clipStartSec;
@@ -248,16 +249,16 @@ class NativeVideoReviewView extends FrameLayout {
         speed05Button.setOnClickListener(v -> setPlaybackRate(0.5));
         speed1Button.setOnClickListener(v -> setPlaybackRate(1.0));
         previous.setOnClickListener(v -> {
-            if (callback != null) callback.onNavigate(eventIndex, -1);
+            if (callback != null) callback.onNavigate(eventId, eventIndex, -1);
         });
         next.setOnClickListener(v -> {
-            if (callback != null) callback.onNavigate(eventIndex, 1);
+            if (callback != null) callback.onNavigate(eventId, eventIndex, 1);
         });
         keep.setOnClickListener(v -> {
-            if (callback != null) callback.onKeep(eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
+            if (callback != null) callback.onKeep(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
         });
         edit.setOnClickListener(v -> {
-            if (callback != null) callback.onEdit(eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
+            if (callback != null) callback.onEdit(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
         });
     }
 
@@ -268,6 +269,7 @@ class NativeVideoReviewView extends FrameLayout {
     void show(JSONObject payload) {
         try {
             String uri = payload.getString("sourceUri");
+            eventId = payload.optString("eventId", "");
             eventIndex = payload.optInt("eventIndex", -1);
             eventTimeSec = Math.max(0.0, payload.optDouble("eventVideoTime", 0.0));
             double durationSec = payload.optDouble("durationSec", 0.0);

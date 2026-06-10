@@ -89,21 +89,21 @@ public class MainActivity extends AppCompatActivity {
         nativeVideoReviewView = new NativeVideoReviewView(this);
         nativeVideoReviewView.setCallback(new NativeVideoReviewView.Callback() {
             @Override
-            public void onKeep(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+            public void onKeep(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
                 if (nativeReviewOnly) finish();
-                else if (videoBridge != null) videoBridge.onVideoReviewKeep(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+                else if (videoBridge != null) videoBridge.onVideoReviewKeep(eventId, eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
             }
 
             @Override
-            public void onEdit(int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
+            public void onEdit(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate) {
                 if (nativeReviewOnly) Log.i(TAG, "native review edit requested");
-                else if (videoBridge != null) videoBridge.onVideoReviewEdit(eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
+                else if (videoBridge != null) videoBridge.onVideoReviewEdit(eventId, eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
             }
 
             @Override
-            public void onNavigate(int eventIndex, int direction) {
+            public void onNavigate(String eventId, int eventIndex, int direction) {
                 if (nativeReviewOnly) Log.i(TAG, "native review navigation requested");
-                else if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventIndex, direction);
+                else if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventId, eventIndex, direction);
             }
 
             @Override

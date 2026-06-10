@@ -735,7 +735,7 @@ test.describe('native video review', () => {
       return {
         events: M.events,
         payloads,
-        editIndex: _reviewEditIndex,
+        editIndex: _reviewEditId,
         running: M.running,
       };
     });
@@ -905,5 +905,42 @@ test.describe('native video review', () => {
     expect(payload.sourceUri).toBe('content://recorded/second.mp4');
     expect(payload.eventVideoTime).toBe(6);
     expect(payload.clipStart).toBe(1);
+  });
+
+  test('review decisions resolve events by stable id even if the list shifts', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 12, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).startVideoReviewForIndex(1);
+      const payload = (window as any).__reviewPayload;
+      // A new event lands at the front while the review is open, shifting indices.
+      M.events.unshift({ id: 'ev-injected', ts: 2, period: 1, side: 'L', actionId: 101, label: 'Compound', emoji: 'C', isHit: false, reviewed: true });
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventId: payload.eventId,
+        eventIndex: payload.eventIndex, // stale: now points at a different event
+        chosenTime: 12,
+        clipStart: 7,
+        clipEnd: 14,
+        playbackRate: 0.5,
+      }));
+      return {
+        payloadEventId: payload.eventId,
+        confirmed: M.events.filter((e: any) => e.reviewStatus === 'confirmed').map((e: any) => `${e.label}:${e.side}`),
+      };
+    });
+
+    expect(result.payloadEventId).toBeTruthy();
+    expect(result.confirmed).toEqual(['Simple Attack:R']);
   });
 });
