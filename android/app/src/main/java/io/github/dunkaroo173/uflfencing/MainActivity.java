@@ -101,9 +101,15 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onNavigate(String eventId, int eventIndex, int direction) {
+            public void onMark(String eventId, double chosenTimeSec, double playbackRate) {
+                if (nativeReviewOnly) Log.i(TAG, "native review mark requested");
+                else if (videoBridge != null) videoBridge.onVideoReviewMark(eventId, chosenTimeSec, playbackRate);
+            }
+
+            @Override
+            public void onNavigate(String eventId, int eventIndex, int direction, double chosenTimeSec) {
                 if (nativeReviewOnly) Log.i(TAG, "native review navigation requested");
-                else if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventId, eventIndex, direction);
+                else if (videoBridge != null) videoBridge.onVideoReviewNavigate(eventId, eventIndex, direction, chosenTimeSec);
             }
 
             @Override

@@ -280,12 +280,23 @@ public class AndroidVideoBridge {
         emitVideoReviewDecision("window.onAndroidVideoReviewEdit", eventId, eventIndex, chosenTimeSec, clipStartSec, clipEndSec, playbackRate);
     }
 
-    void onVideoReviewNavigate(String eventId, int eventIndex, int direction) {
+    void onVideoReviewMark(String eventId, double chosenTimeSec, double playbackRate) {
+        try {
+            JSONObject payload = new JSONObject();
+            if (eventId != null && !eventId.isEmpty()) payload.put("eventId", eventId);
+            payload.put("chosenTime", chosenTimeSec);
+            payload.put("playbackRate", playbackRate);
+            emit("window.onAndroidVideoReviewMark", payload);
+        } catch (Exception ignored) {}
+    }
+
+    void onVideoReviewNavigate(String eventId, int eventIndex, int direction, double chosenTimeSec) {
         try {
             JSONObject payload = new JSONObject();
             if (eventId != null && !eventId.isEmpty()) payload.put("eventId", eventId);
             payload.put("eventIndex", eventIndex);
             payload.put("direction", direction);
+            payload.put("chosenTime", chosenTimeSec);
             emit("window.onAndroidVideoReviewNavigate", payload);
         } catch (Exception ignored) {}
     }

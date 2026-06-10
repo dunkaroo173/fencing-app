@@ -30,7 +30,8 @@ class NativeVideoReviewView extends FrameLayout {
     interface Callback {
         void onKeep(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
         void onEdit(String eventId, int eventIndex, double chosenTimeSec, double clipStartSec, double clipEndSec, double playbackRate);
-        void onNavigate(String eventId, int eventIndex, int direction);
+        void onMark(String eventId, double chosenTimeSec, double playbackRate);
+        void onNavigate(String eventId, int eventIndex, int direction, double chosenTimeSec);
         void onClose();
         void onError(String message);
     }
@@ -57,12 +58,16 @@ class NativeVideoReviewView extends FrameLayout {
     private final Button speed025Button;
     private final Button speed05Button;
     private final Button speed1Button;
+    private final Button overturnButton;
+    private final Button keepButton;
+    private final Button markButton;
     private final LinearLayout advancedControls;
 
     private ExoPlayer player;
     private Callback callback;
     private String eventId = "";
     private int eventIndex = -1;
+    private boolean annotateMode;
     private double eventTimeSec;
     private double clipStartSec;
     private double clipEndSec;
@@ -73,7 +78,8 @@ class NativeVideoReviewView extends FrameLayout {
         @Override
         public void run() {
             syncUi();
-            if (player != null && player.isPlaying() && player.getCurrentPosition() >= secondsToMs(clipEndSec)) {
+            // Annotate mode plays the whole video; only review clips loop back.
+            if (!annotateMode && player != null && player.isPlaying() && player.getCurrentPosition() >= secondsToMs(clipEndSec)) {
                 player.pause();
                 player.seekTo(secondsToMs(clipStartSec));
             }
@@ -176,14 +182,19 @@ class NativeVideoReviewView extends FrameLayout {
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
         moreButton = button(context, "SEEK +", Color.rgb(70, 78, 96));
+        markButton = button(context, "MARK ACTION", Color.rgb(255, 180, 40));
+        markButton.setVisibility(GONE);
         Button edit = button(context, "OVERTURN", Color.rgb(245, 156, 66));
         Button keep = button(context, "CALL STANDS", Color.rgb(36, 190, 118));
+        overturnButton = edit;
+        keepButton = keep;
         primaryControls.addView(replay);
         primaryControls.addView(playButton);
         primaryControls.addView(speed025Button);
         primaryControls.addView(speed05Button);
         primaryControls.addView(speed1Button);
         primaryControls.addView(moreButton);
+        primaryControls.addView(markButton);
         primaryControls.addView(edit);
         primaryControls.addView(keep);
         bottom.addView(primaryControls);
@@ -249,16 +260,20 @@ class NativeVideoReviewView extends FrameLayout {
         speed05Button.setOnClickListener(v -> setPlaybackRate(0.5));
         speed1Button.setOnClickListener(v -> setPlaybackRate(1.0));
         previous.setOnClickListener(v -> {
-            if (callback != null) callback.onNavigate(eventId, eventIndex, -1);
+            if (callback != null) callback.onNavigate(eventId, eventIndex, -1, currentSec());
         });
         next.setOnClickListener(v -> {
-            if (callback != null) callback.onNavigate(eventId, eventIndex, 1);
+            if (callback != null) callback.onNavigate(eventId, eventIndex, 1, currentSec());
         });
         keep.setOnClickListener(v -> {
             if (callback != null) callback.onKeep(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
         });
         edit.setOnClickListener(v -> {
             if (callback != null) callback.onEdit(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
+        });
+        markButton.setOnClickListener(v -> {
+            if (player != null) player.pause();
+            if (callback != null) callback.onMark(eventId, currentSec(), playbackRate);
         });
     }
 
@@ -269,18 +284,22 @@ class NativeVideoReviewView extends FrameLayout {
     void show(JSONObject payload) {
         try {
             String uri = payload.getString("sourceUri");
+            annotateMode = "annotate".equals(payload.optString("mode", "review"));
             eventId = payload.optString("eventId", "");
             eventIndex = payload.optInt("eventIndex", -1);
             eventTimeSec = Math.max(0.0, payload.optDouble("eventVideoTime", 0.0));
             double durationSec = payload.optDouble("durationSec", 0.0);
-            clipStartSec = Math.max(0.0, payload.optDouble("clipStart", eventTimeSec - DEFAULT_LEAD_SEC));
-            clipEndSec = payload.optDouble("clipEnd", eventTimeSec + DEFAULT_TAIL_SEC);
+            clipStartSec = Math.max(0.0, payload.optDouble("clipStart", annotateMode ? 0.0 : eventTimeSec - DEFAULT_LEAD_SEC));
+            clipEndSec = payload.optDouble("clipEnd", annotateMode ? durationSec : eventTimeSec + DEFAULT_TAIL_SEC);
             if (durationSec > 0) clipEndSec = Math.min(durationSec, clipEndSec);
             clipEndSec = Math.max(clipStartSec + 0.5, clipEndSec);
-            playbackRate = payload.optDouble("playbackRate", 0.5);
+            playbackRate = payload.optDouble("playbackRate", annotateMode ? 1.0 : 0.5);
             boolean showReviewOverlay = payload.optBoolean("showReviewOverlay", false);
             scoreStrip.setVisibility(showReviewOverlay ? VISIBLE : GONE);
             actionCard.setVisibility(showReviewOverlay ? VISIBLE : GONE);
+            markButton.setVisibility(annotateMode ? VISIBLE : GONE);
+            overturnButton.setVisibility(annotateMode ? GONE : VISIBLE);
+            keepButton.setVisibility(annotateMode ? GONE : VISIBLE);
 
             applyReviewContext(payload);
 
@@ -297,7 +316,8 @@ class NativeVideoReviewView extends FrameLayout {
             player.setMediaItem(MediaItem.fromUri(Uri.parse(uri)));
             player.prepare();
             player.setPlaybackParameters(new PlaybackParameters((float) playbackRate));
-            player.seekTo(secondsToMs(clipStartSec));
+            double resumeAt = clamp(payload.optDouble("resumeAt", clipStartSec), clipStartSec, clipEndSec);
+            player.seekTo(secondsToMs(resumeAt));
             setVisibility(VISIBLE);
             advancedControls.setVisibility(GONE);
             moreButton.setText("SEEK +");
