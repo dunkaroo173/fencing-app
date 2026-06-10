@@ -176,8 +176,8 @@ class NativeVideoReviewView extends FrameLayout {
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
         moreButton = button(context, "SEEK +", Color.rgb(70, 78, 96));
-        Button edit = button(context, "EDIT", Color.rgb(245, 156, 66));
-        Button keep = button(context, "DONE", Color.rgb(36, 190, 118));
+        Button edit = button(context, "OVERTURN", Color.rgb(245, 156, 66));
+        Button keep = button(context, "CALL STANDS", Color.rgb(36, 190, 118));
         primaryControls.addView(replay);
         primaryControls.addView(playButton);
         primaryControls.addView(speed025Button);
