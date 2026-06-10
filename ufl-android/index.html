@@ -363,6 +363,13 @@ body.android-native-preview #import-preview{display:none!important}
       <button class="conf-btn conf-confirm"   id="conf-r-yes" style="display:none">✓ CONFIRM</button>
       <button class="conf-btn conf-cancel"    id="conf-r-no">✕ CANCEL</button>
     </div>
+    <div class="confirm-wrap" id="overturn-chooser" style="left:50%;transform:translateX(-50%)">
+      <div class="conf-label">OVERTURN — WHAT HAPPENED?</div>
+      <button class="conf-btn conf-hit"       id="ovr-other">🎯 TOUCH TO ?</button>
+      <button class="conf-btn conf-offtarget" id="ovr-annul">🚫 NO TOUCH</button>
+      <button class="conf-btn conf-confirm"   id="ovr-reclass">✏ RE-CLASSIFY</button>
+      <button class="conf-btn conf-cancel"    id="ovr-cancel">✕ CANCEL</button>
+    </div>
   </div>
 
   <!-- SVG Radial menu overlay (centered, full-screen) -->
@@ -1089,6 +1096,7 @@ function _radPtrUp(e){
 
 function openPie(side){
   stopTimer();
+  hideOverturnChooser();
   _radSide=side; _radPhase='main'; _radStack=[]; _radHov=null; _radEls=[]; _radMenu=null;
   const ov=document.getElementById('radial-overlay');
   ov.style.display='flex'; ov.style.opacity='0';
@@ -1180,6 +1188,7 @@ function hideConfirm() {
 }
 
 function returnToVideoReviewAfterCorrectionCancel() {
+  hideOverturnChooser();
   if (_reviewEditId === null) return false;
   const index = eventIndexById(_reviewEditId);
   _reviewEditId = null;
@@ -1189,6 +1198,111 @@ function returnToVideoReviewAfterCorrectionCancel() {
   setTimeout(() => startVideoReviewForIndex(index), 120);
   return true;
 }
+
+// ── Overturn outcome chooser ──────────────────────────────────────────────────
+function showOverturnChooser() {
+  const index = eventIndexById(_reviewEditId);
+  if (index < 0) return;
+  const ev = M.events[index];
+  const otherName = ev.side === 'L' ? (M.nameR || 'RIGHT') : (M.nameL || 'LEFT');
+  document.getElementById('ovr-other').textContent = `🎯 TOUCH TO ${otherName}`;
+  document.getElementById('overturn-chooser').classList.add('on');
+  setOverlayStatus('Call overturned — choose what actually happened.', false);
+}
+
+function hideOverturnChooser() {
+  document.getElementById('overturn-chooser').classList.remove('on');
+}
+
+// The video review itself is a match event: keep it in the timeline so the
+// events list and exports show what was reviewed and how it was resolved.
+function recordReviewOutcomeEvent(targetEv, outcome) {
+  if (!M || !Array.isArray(M.events) || !targetEv) return;
+  M.events.push({
+    id: newEventId(),
+    ts: targetEv.ts,
+    period: targetEv.period,
+    side: 'C',
+    actionId: 3,
+    label: 'Video Review',
+    emoji: '📹',
+    isHit: false,
+    reviewOutcome: outcome,
+    targetEventId: targetEv.id,
+    reviewed: true,
+    reviewStatus: 'none',
+  });
+  if (typeof scheduleSave === 'function') scheduleSave();
+}
+
+function applyAnnulOverturn() {
+  const index = eventIndexById(_reviewEditId);
+  if (index < 0) {
+    _reviewEditId = null;
+    _reviewEditMeta = null;
+    return;
+  }
+  const old = M.events[index];
+  const originalActionId = old.originalActionId !== undefined ? old.originalActionId : old.actionId;
+  const originalLabel = old.originalLabel !== undefined ? old.originalLabel : old.label;
+  const originalIsHit = old.originalIsHit !== undefined ? old.originalIsHit : old.isHit;
+  const originalSide = old.originalSide !== undefined ? old.originalSide : old.side;
+  M.events[index] = {
+    ...old,
+    isHit: false,
+    reviewed: true,
+    reviewedAt: Date.now(),
+    reviewStatus: 'overturned',
+    overturnOutcome: 'annulled',
+    originalActionId,
+    originalLabel,
+    originalIsHit,
+    originalSide,
+    correctedAt: Date.now(),
+    videoReview: {
+      ...(old.videoReview || {}),
+      ...(_reviewEditMeta || {}),
+    },
+  };
+  _reviewEditId = null;
+  _reviewEditMeta = null;
+  recomputeMatchScoreFromEvents();
+  if (typeof scheduleSave === 'function') scheduleSave();
+  buildReport();
+  recordReviewOutcomeEvent(M.events[index], 'overturned:annulled');
+  refreshHUD();
+  const hasPendingReview = M.events.some(e2 => e2 && !e2.reviewed && (e2.side === 'L' || e2.side === 'R'));
+  if (hasPendingReview) {
+    setOverlayStatus('Touch annulled.', false);
+    setTimeout(() => startVideoReviewForIndex(index), 250);
+  } else {
+    setOverlayStatus('Touch annulled. All actions reviewed.', false);
+  }
+}
+
+document.getElementById('ovr-other').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideOverturnChooser();
+  const index = eventIndexById(_reviewEditId);
+  if (index < 0 || !_reviewEditMeta) return;
+  _reviewEditMeta.overturnOutcome = 'awarded-other';
+  openPie(M.events[index].side === 'L' ? 'R' : 'L');
+}, {passive:false});
+document.getElementById('ovr-annul').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideOverturnChooser();
+  applyAnnulOverturn();
+}, {passive:false});
+document.getElementById('ovr-reclass').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideOverturnChooser();
+  if (_reviewEditMeta) _reviewEditMeta.overturnOutcome = 'reclassified';
+  setOverlayStatus('Choose corrected fencer and action.', false);
+}, {passive:false});
+document.getElementById('ovr-cancel').addEventListener('touchend', e => {
+  e.preventDefault();
+  returnToVideoReviewAfterCorrectionCancel();
+}, {passive:false});
 
 ['l','r'].forEach(s => {
   const side = s === 'l' ? 'L' : 'R';
@@ -1264,7 +1378,9 @@ function doConfirm(side, actionId, isHit) {
     _reviewEditMeta = null;
   }
   if (editIndex >= 0) {
+    hideOverturnChooser();
     const old = M.events[editIndex];
+    const overturnOutcome = _reviewEditMeta && _reviewEditMeta.overturnOutcome ? _reviewEditMeta.overturnOutcome : null;
     const adjustedTime = Number.isFinite(Number(_reviewEditMeta && _reviewEditMeta.chosenBoutTime))
       ? periodTimeFromBoutTime(Number(_reviewEditMeta.chosenBoutTime))
       : { period: old.period, ts: old.ts };
@@ -1283,7 +1399,10 @@ function doConfirm(side, actionId, isHit) {
       isHit: ev.isHit,
       reviewed: true,
       reviewedAt: Date.now(),
-      reviewStatus: 'corrected',
+      // Awarding the touch to the other fencer overturns the call; a plain
+      // re-classification means the call stood but the label was wrong.
+      reviewStatus: overturnOutcome === 'awarded-other' ? 'overturned' : 'corrected',
+      ...(overturnOutcome ? { overturnOutcome } : {}),
       originalActionId,
       originalLabel,
       originalIsHit,
@@ -1302,6 +1421,8 @@ function doConfirm(side, actionId, isHit) {
     recomputeMatchScoreFromEvents();
     if (typeof scheduleSave === 'function') scheduleSave();
     buildReport();
+    recordReviewOutcomeEvent(M.events[editedIndex],
+      overturnOutcome === 'awarded-other' ? 'overturned:awarded-other' : 'corrected');
     const hasPendingReview = M.events.some(e2 => e2 && !e2.reviewed && (e2.side === 'L' || e2.side === 'R'));
     if (hasPendingReview) {
       setOverlayStatus('Correction saved.', false);
@@ -2740,7 +2861,9 @@ function videoReviewSource(index = latestReviewableEventIndex()) {
 function eventReviewTitle(ev, index) {
   const sideName = ev.side === 'L' ? M.nameL : ev.side === 'R' ? M.nameR : 'REF';
   const result = ev.isHit ? 'HIT' : ev.side === 'C' ? 'NO TOUCH' : 'OFF TARGET';
-  const status = ev.reviewStatus === 'corrected' ? 'CORRECTED' : ev.reviewed ? 'CONFIRMED' : 'PENDING';
+  const status = ev.reviewStatus === 'corrected' ? 'CORRECTED'
+    : ev.reviewStatus === 'overturned' ? 'OVERTURNED'
+    : ev.reviewed ? 'CONFIRMED' : 'PENDING';
   return `#${index + 1} ${sideName}: ${String(ev.label || '').toUpperCase()} - ${result} (${status})`;
 }
 
@@ -2975,7 +3098,8 @@ window.onAndroidVideoPickCanceled = function() {
 window.onAndroidVideoReviewKeep = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   if (!markReviewDecision(payload, 'confirmed')) return;
-  setOverlayStatus('Action confirmed in video review.', false);
+  recordReviewOutcomeEvent(M.events[resolveReviewEventIndex(payload)], 'call-stands');
+  setOverlayStatus('Call stands - action confirmed.', false);
   try {
     if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
   } catch (_) {}
@@ -3019,11 +3143,10 @@ window.onAndroidVideoReviewEdit = function(payloadJson) {
   } catch (_) {}
   showScreen('s-match');
   stopTimer();
-  const showCorrectionControls = () => setOverlayStatus('Choose corrected fencer and action.', false);
   if (_resumeRecordingAfterVideoReview) {
-    restartNativeRecordingAfterReview().then(showCorrectionControls);
+    restartNativeRecordingAfterReview().then(showOverturnChooser);
   } else {
-    showCorrectionControls();
+    showOverturnChooser();
   }
 };
 

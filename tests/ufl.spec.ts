@@ -1005,4 +1005,168 @@ test.describe('native video review', () => {
     expect(result.afterDismiss).toBe(0);
     expect(result.afterAccept).toBe(1);
   });
+
+  test('call stands records a review event in the timeline', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).startVideoReviewForIndex(0);
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventId: M.events[0].id,
+        eventIndex: 0,
+        chosenTime: 8,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      return {
+        target: M.events[0],
+        review: M.events[1],
+      };
+    });
+
+    expect(result.target.reviewStatus).toBe('confirmed');
+    expect(result.review.actionId).toBe(3);
+    expect(result.review.side).toBe('C');
+    expect(result.review.reviewOutcome).toBe('call-stands');
+    expect(result.review.targetEventId).toBe(result.target.id);
+  });
+
+  test('overturn with annul zeroes the touch and records the outcome', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).recomputeMatchScoreFromEvents();
+      const scoreBefore = { l: M.scoreL, r: M.scoreR };
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      const chooserVisible = document.getElementById('overturn-chooser')?.classList.contains('on');
+      document.getElementById('ovr-annul')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      return {
+        scoreBefore,
+        scoreL: M.scoreL,
+        scoreR: M.scoreR,
+        chooserVisible,
+        annulled: M.events[0],
+        review: M.events[1],
+      };
+    });
+
+    expect(result.chooserVisible).toBe(true);
+    expect(result.scoreBefore).toEqual({ l: 0, r: 1 });
+    expect(result.scoreL).toBe(0);
+    expect(result.scoreR).toBe(0);
+    expect(result.annulled.isHit).toBe(false);
+    expect(result.annulled.reviewStatus).toBe('overturned');
+    expect(result.annulled.overturnOutcome).toBe('annulled');
+    expect(result.annulled.originalIsHit).toBe(true);
+    expect(result.annulled.actionId).toBe(200);
+    expect(result.review.reviewOutcome).toBe('overturned:annulled');
+    expect(result.review.targetEventId).toBe(result.annulled.id);
+  });
+
+  test('overturn awarding the touch opens the radial for the other fencer', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 210, label: 'Parry-Riposte', emoji: 'P', isHit: true },
+      ];
+      (window as any).recomputeMatchScoreFromEvents();
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.2,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      document.getElementById('ovr-other')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      const radSide = _radSide;
+      (window as any).doConfirm('L', 103, true);
+      return {
+        radSide,
+        scoreL: M.scoreL,
+        scoreR: M.scoreR,
+        overturned: M.events[0],
+        review: M.events[1],
+      };
+    });
+
+    expect(result.radSide).toBe('L');
+    expect(result.scoreL).toBe(1);
+    expect(result.scoreR).toBe(0);
+    expect(result.overturned.side).toBe('L');
+    expect(result.overturned.reviewStatus).toBe('overturned');
+    expect(result.overturned.overturnOutcome).toBe('awarded-other');
+    expect(result.overturned.originalSide).toBe('R');
+    expect(result.review.reviewOutcome).toBe('overturned:awarded-other');
+  });
+
+  test('canceling the overturn chooser returns to the same review', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      const payloads: any[] = [];
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      document.getElementById('ovr-cancel')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return {
+        chooserVisible: document.getElementById('overturn-chooser')?.classList.contains('on'),
+        events: M.events.length,
+        eventUntouched: !M.events[0].reviewed,
+        payloads: payloads.length,
+        editId: _reviewEditId,
+      };
+    });
+
+    expect(result.chooserVisible).toBe(false);
+    expect(result.events).toBe(1);
+    expect(result.eventUntouched).toBe(true);
+    expect(result.payloads).toBe(1);
+    expect(result.editId).toBeNull();
+  });
 });
