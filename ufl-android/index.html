@@ -673,6 +673,7 @@ function refreshHUD() {
 let _timerInterval = null;
 
 function startTimer() {
+  if (_annotateActive) return; // workbench drives playback; the bout clock stays parked
   if (_timerInterval) return;
   noteRecordingClockResume();
   M.running = true;
@@ -709,6 +710,9 @@ function endPeriod() {
 }
 
 function finishMatch() {
+  _annotateActive = false;
+  _nativeReviewMode = null;
+  _annotateMarkBoutTime = null;
   stopTimer();
   stopActiveRecording({ autoStop: true });
   M.finished = true;
@@ -756,6 +760,12 @@ async function clickStart() {
     AndroidVideo.seekImportedPreview(0);
   }
   updateImportedVideoModeUI();
+  if (canUseAnnotationWorkbench()) {
+    // Imported video on Android: annotate via the native workbench instead of
+    // replaying the video in real time against the bout clock.
+    openAnnotationWorkbench(0);
+    return;
+  }
   if (!isImportedVideoAnnotationMode()) await prepareRecordingBeforeStart();
   runCountdown(() => {
     showScreen('s-match');
@@ -799,12 +809,14 @@ document.getElementById('pause-btn').addEventListener('touchend', e => {
 document.getElementById('res-resume').addEventListener('touchend', e => {
   e.preventDefault();
   showScreen('s-match');
+  if (canUseAnnotationWorkbench()) { openAnnotationWorkbench(); return; }
   startTimer();
 }, {passive:false});
 
 document.getElementById('resume-btn').addEventListener('touchend', e => {
   e.preventDefault();
   showScreen('s-match');
+  if (canUseAnnotationWorkbench()) { openAnnotationWorkbench(); return; }
   startTimer();
 }, {passive:false});
 
@@ -1142,6 +1154,11 @@ function closePie(side, resume = true){
       if(_radSide!==null)closePie(_radSide,false);
       if(canceled)return;
     }
+    if(_annotateMarkBoutTime!==null){
+      if(_radSide!==null)closePie(_radSide,false);
+      returnToWorkbenchAfterMarkCancel();
+      return;
+    }
     if(_radSide!==null)closePie(_radSide);
   },{passive:false});
 })();
@@ -1271,6 +1288,11 @@ function applyAnnulOverturn() {
   buildReport();
   recordReviewOutcomeEvent(M.events[index], 'overturned:annulled');
   refreshHUD();
+  if (_annotateActive) {
+    setOverlayStatus('Touch annulled.', false);
+    setTimeout(() => openAnnotationWorkbench(), 250);
+    return;
+  }
   const hasPendingReview = M.events.some(e2 => e2 && !e2.reviewed && (e2.side === 'L' || e2.side === 'R'));
   if (hasPendingReview) {
     setOverlayStatus('Touch annulled.', false);
@@ -1329,6 +1351,7 @@ document.getElementById('ovr-cancel').addEventListener('touchend', e => {
     e.preventDefault();
     hideConfirm();
     if (returnToVideoReviewAfterCorrectionCancel()) return;
+    if (returnToWorkbenchAfterMarkCancel()) return;
     if (!M.finished) startTimer();
   }, {passive:false});
 });
@@ -1423,6 +1446,11 @@ function doConfirm(side, actionId, isHit) {
     buildReport();
     recordReviewOutcomeEvent(M.events[editedIndex],
       overturnOutcome === 'awarded-other' ? 'overturned:awarded-other' : 'corrected');
+    if (_annotateActive) {
+      setOverlayStatus('Correction saved.', false);
+      setTimeout(() => openAnnotationWorkbench(), 250);
+      return;
+    }
     const hasPendingReview = M.events.some(e2 => e2 && !e2.reviewed && (e2.side === 'L' || e2.side === 'R'));
     if (hasPendingReview) {
       setOverlayStatus('Correction saved.', false);
@@ -1431,6 +1459,17 @@ function doConfirm(side, actionId, isHit) {
       setOverlayStatus('Correction saved. All actions reviewed.', false);
     }
     return;
+  }
+
+  // A pending MARK from the annotation workbench stamps the event at the
+  // paused video position instead of the (parked) bout clock.
+  const markBoutTime = _annotateMarkBoutTime;
+  if (markBoutTime !== null) {
+    const adjusted = periodTimeFromBoutTime(markBoutTime);
+    ev.ts = adjusted.ts;
+    ev.period = adjusted.period;
+    ev.videoReview = { markedTime: markBoutTime };
+    _annotateMarkBoutTime = null;
   }
 
   M.events.push(ev);
@@ -1458,6 +1497,11 @@ function doConfirm(side, actionId, isHit) {
   // Win condition: DE ends at 15 touches; poule at 5
   const maxScore = M.format === 'poule' ? 5 : 15;
   if (!isImportedVideoAnnotationMode() && (M.scoreL >= maxScore || M.scoreR >= maxScore)) { finishMatch(); return; }
+  if (markBoutTime !== null) {
+    if (typeof scheduleSave === 'function') scheduleSave();
+    setTimeout(() => openAnnotationWorkbench(), 200);
+    return;
+  }
   if (!M.finished) startTimer();
 }
 
@@ -1516,6 +1560,10 @@ let _nativeRecordingReadyPromise = null;
 let _nativeRecordingReadyResolver = null;
 let _reviewEditId = null;
 let _reviewEditMeta = null;
+let _annotateActive = false;       // an import-annotation workbench session is in progress
+let _annotatePosition = 0;         // last video position, so the workbench reopens where it left off
+let _annotateMarkBoutTime = null;  // video time of a pending MARK awaiting action selection
+let _nativeReviewMode = null;      // 'annotate' | 'review' while the native view is open
 let _evSeq = 0;
 
 function newEventId() {
@@ -1663,6 +1711,7 @@ function pauseImportedVideo() {
 }
 
 function resumeImportedVideo() {
+  if (_annotateActive) return; // workbench owns playback in annotate sessions
   if (!_importVideoFile || !M || !M.running) return;
   if (_nativeImportVideo && isAndroidNativeVideoAvailable() && typeof AndroidVideo.playImportedPreview === 'function') {
     AndroidVideo.playImportedPreview();
@@ -1700,6 +1749,9 @@ function resetImportedVideo(clearFile = false) {
     if (input) input.value = '';
     setImportVideoStatus('');
     _nativeImportVideo = null;
+    _annotateActive = false;
+    _annotatePosition = 0;
+    _annotateMarkBoutTime = null;
     document.body.classList.remove('android-native-preview');
     if (isAndroidNativeVideoAvailable() && typeof AndroidVideo.clearImportedPreview === 'function') {
       AndroidVideo.clearImportedPreview();
@@ -2880,6 +2932,78 @@ function latestReviewableEventIndex() {
   return M.events.length - 1;
 }
 
+// ── Import annotation workbench ───────────────────────────────────────────────
+// Player-first annotation for imported videos: scrub/slow-mo the full video in
+// the native review view and stamp actions at the paused position, instead of
+// annotating in real time against the bout clock.
+function canUseAnnotationWorkbench() {
+  return !!(isImportedVideoAnnotationMode() && _nativeImportVideo && _nativeImportVideo.uri && isAndroidVideoReviewAvailable());
+}
+
+function openAnnotationWorkbench(resumeAt = _annotatePosition) {
+  if (!canUseAnnotationWorkbench() || !M) return false;
+  ensureEventIds();
+  stopTimer();
+  closeDrawer();
+  hideOverturnChooser();
+  if (typeof AndroidVideo.clearImportedPreview === 'function') {
+    try { AndroidVideo.clearImportedPreview(); } catch (_) {}
+  }
+  const durationSec = Number(_nativeImportVideo.durationMs || 0) / 1000;
+  const at = Math.max(0, Math.min(Number(resumeAt) || 0, durationSec || Infinity));
+  _annotateActive = true;
+  _annotatePosition = at;
+  try {
+    AndroidVideo.startVideoReview(JSON.stringify({
+      mode: 'annotate',
+      sourceUri: _nativeImportVideo.uri,
+      sourceType: 'imported',
+      eventIndex: -1,
+      eventVideoTime: at,
+      clipStart: 0,
+      clipEnd: durationSec,
+      durationSec,
+      resumeAt: at,
+      playbackRate: 1.0,
+      showReviewOverlay: false,
+      match: snapshotMatchForOverlay(M),
+      title: 'Annotate imported video',
+    }));
+    _nativeReviewMode = 'annotate';
+    return true;
+  } catch (err) {
+    _annotateActive = false;
+    _nativeReviewMode = null;
+    setOverlayStatus(err && err.message ? err.message : 'Could not open annotation workbench.', false);
+    return false;
+  }
+}
+
+function returnToWorkbenchAfterMarkCancel() {
+  if (_annotateMarkBoutTime === null) return false;
+  _annotateMarkBoutTime = null;
+  setTimeout(() => openAnnotationWorkbench(), 120);
+  return true;
+}
+
+// Nearest L/R event strictly before/after a video position (bout time equals
+// video time for imported sources - timeOffset is 0).
+function nearestReviewIndexForTime(boutTime, direction) {
+  if (!M || !Array.isArray(M.events)) return -1;
+  let best = -1;
+  let bestTime = null;
+  M.events.forEach((ev, i) => {
+    if (!ev || (ev.side !== 'L' && ev.side !== 'R')) return;
+    const t = overlayEventTime(ev);
+    if (direction >= 0 ? t <= boutTime : t >= boutTime) return;
+    if (best === -1 || (direction >= 0 ? t < bestTime : t > bestTime)) {
+      best = i;
+      bestTime = t;
+    }
+  });
+  return best;
+}
+
 function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
   ensureEventIds();
   if (!M || !M.events || index < 0 || index >= M.events.length) {
@@ -2932,6 +3056,7 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
       match,
       title: eventReviewTitle(ev, index),
     }));
+    _nativeReviewMode = 'review';
     return true;
   } catch (err) {
     setOverlayStatus(err && err.message ? err.message : 'Could not start video review.', false);
@@ -3103,6 +3228,13 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
   try {
     if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
   } catch (_) {}
+  if (_annotateActive) {
+    _nativeReviewMode = null;
+    const chosen = Number(payload.chosenTime);
+    if (Number.isFinite(chosen)) _annotatePosition = chosen;
+    setTimeout(() => openAnnotationWorkbench(), 120);
+    return;
+  }
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
@@ -3141,6 +3273,7 @@ window.onAndroidVideoReviewEdit = function(payloadJson) {
   try {
     if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
   } catch (_) {}
+  _nativeReviewMode = null;
   showScreen('s-match');
   stopTimer();
   if (_resumeRecordingAfterVideoReview) {
@@ -3153,7 +3286,20 @@ window.onAndroidVideoReviewEdit = function(payloadJson) {
 window.onAndroidVideoReviewNavigate = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   const index = resolveReviewEventIndex(payload);
-  const next = adjacentReviewIndex(index, Number(payload.direction));
+  const direction = Number(payload.direction);
+  if (index < 0 && _annotateActive) {
+    // Navigating from the workbench (no current event): jump to the nearest
+    // marked action relative to the scrub position and open its review.
+    const t = Number(payload.chosenTime);
+    const target = nearestReviewIndexForTime(Number.isFinite(t) ? t : 0, direction);
+    if (target < 0) {
+      setOverlayStatus('No marked actions in that direction.', false);
+      return;
+    }
+    startVideoReviewForIndex(target);
+    return;
+  }
+  const next = adjacentReviewIndex(index, direction);
   if (next < 0 || next === index) {
     // Nothing further in that direction — keep the current review open.
     setOverlayStatus('No more actions in that direction.', false);
@@ -3162,8 +3308,38 @@ window.onAndroidVideoReviewNavigate = function(payloadJson) {
   startVideoReviewForIndex(next);
 };
 
+window.onAndroidVideoReviewMark = function(payloadJson) {
+  const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  const chosenTime = Number(payload.chosenTime);
+  if (!_annotateActive || !Number.isFinite(chosenTime)) return;
+  _annotatePosition = chosenTime;
+  _annotateMarkBoutTime = chosenTime;
+  _nativeReviewMode = null;
+  try {
+    if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
+  } catch (_) {}
+  showScreen('s-match');
+  setOverlayStatus(`Mark at ${chosenTime.toFixed(1)}s - select fencer and action.`, false);
+};
+
 window.onAndroidVideoReviewClose = function() {
   setOverlayStatus('', false);
+  if (_annotateActive) {
+    const closedMode = _nativeReviewMode;
+    _nativeReviewMode = null;
+    if (closedMode === 'review') {
+      // An event review opened from the workbench was dismissed - go back.
+      setTimeout(() => openAnnotationWorkbench(), 120);
+      return;
+    }
+    // The workbench itself was closed: park the session, resumable from the
+    // match screen.
+    _annotateActive = false;
+    document.getElementById('pause-btn').style.display  = 'none';
+    document.getElementById('resume-btn').style.display = 'block';
+    setOverlayStatus('Annotation paused - tap RESUME to continue.', false);
+    return;
+  }
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;

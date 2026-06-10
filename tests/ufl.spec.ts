@@ -1170,3 +1170,163 @@ test.describe('native video review', () => {
     expect(result.editId).toBeNull();
   });
 });
+
+test.describe('import annotation workbench', () => {
+  const installWorkbenchMocks = async (page: Page) => {
+    await page.evaluate(() => {
+      (window as any).__reviewPayloads = [];
+      (window as any).AndroidVideo = {
+        exportOverlay() {},
+        closeVideoReview() {},
+        clearImportedPreview() {},
+        seekImportedPreview() {},
+        pauseImportedPreview() {},
+        playImportedPreview() {},
+        startVideoReview(json: string) { (window as any).__reviewPayloads.push(JSON.parse(json)); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
+      _importVideoFile = { name: 'source.mp4', nativeUri: 'content://review/source.mp4' } as any;
+    });
+  };
+
+  test('starting a match with an imported video opens the annotate workbench', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => ({
+      payloads: (window as any).__reviewPayloads,
+      running: M.running,
+      annotateActive: _annotateActive,
+    }));
+
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].mode).toBe('annotate');
+    expect(result.payloads[0].clipStart).toBe(0);
+    expect(result.payloads[0].clipEnd).toBe(120);
+    expect(result.payloads[0].resumeAt).toBe(0);
+    expect(result.payloads[0].playbackRate).toBe(1.0);
+    expect(result.running).toBe(false);
+    expect(result.annotateActive).toBe(true);
+  });
+
+  test('marking a moment stamps the event at the video position and reopens the workbench', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      (window as any).__reviewPayloads.length = 0;
+      (window as any).onAndroidVideoReviewMark(JSON.stringify({ chosenTime: 42.5, playbackRate: 1 }));
+      const markPending = _annotateMarkBoutTime;
+      (window as any).doConfirm('L', 100, true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return {
+        markPending,
+        event: M.events[0],
+        scoreL: M.scoreL,
+        payloads: (window as any).__reviewPayloads,
+        running: M.running,
+      };
+    });
+
+    expect(result.markPending).toBe(42.5);
+    expect(result.event.ts).toBe(42.5);
+    expect(result.event.period).toBe(1);
+    expect(result.event.videoReview.markedTime).toBe(42.5);
+    expect(result.scoreL).toBe(1);
+    expect(result.running).toBe(false);
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].mode).toBe('annotate');
+    expect(result.payloads[0].resumeAt).toBe(42.5);
+  });
+
+  test('canceling a mark returns to the workbench without recording an event', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      (window as any).__reviewPayloads.length = 0;
+      (window as any).onAndroidVideoReviewMark(JSON.stringify({ chosenTime: 17.2, playbackRate: 1 }));
+      (window as any).showConfirm('L', 100);
+      document.getElementById('conf-l-no')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return {
+        events: M.events.length,
+        markPending: _annotateMarkBoutTime,
+        payloads: (window as any).__reviewPayloads,
+      };
+    });
+
+    expect(result.events).toBe(0);
+    expect(result.markPending).toBeNull();
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].mode).toBe('annotate');
+    expect(result.payloads[0].resumeAt).toBe(17.2);
+  });
+
+  test('workbench navigation opens the nearest marked action and keep returns to the workbench', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).__reviewPayloads.length = 0;
+      (window as any).onAndroidVideoReviewNavigate(JSON.stringify({ eventIndex: -1, direction: 1, chosenTime: 12 }));
+      const reviewPayload = (window as any).__reviewPayloads[0];
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventId: reviewPayload ? reviewPayload.eventId : null,
+        eventIndex: reviewPayload ? reviewPayload.eventIndex : -1,
+        chosenTime: 30,
+        clipStart: 25,
+        clipEnd: 32,
+        playbackRate: 0.5,
+      }));
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return {
+        payloads: (window as any).__reviewPayloads,
+        reviewedStatus: M.events[1].reviewStatus,
+      };
+    });
+
+    expect(result.payloads).toHaveLength(2);
+    expect(result.payloads[0].mode).not.toBe('annotate');
+    expect(result.payloads[0].eventIndex).toBe(1); // ts 30 is the nearest after 12s
+    expect(result.payloads[1].mode).toBe('annotate');
+    expect(result.payloads[1].resumeAt).toBe(30);
+    expect(result.reviewedStatus).toBe('confirmed');
+  });
+
+  test('closing the workbench parks annotation and resume reopens it', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      (window as any).__reviewPayloads.length = 0;
+      (window as any).onAndroidVideoReviewClose();
+      const parked = {
+        annotateActive: _annotateActive,
+        resumeVisible: document.getElementById('resume-btn')?.style.display,
+      };
+      document.getElementById('resume-btn')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return {
+        parked,
+        payloads: (window as any).__reviewPayloads,
+        annotateActive: _annotateActive,
+      };
+    });
+
+    expect(result.parked.annotateActive).toBe(false);
+    expect(result.parked.resumeVisible).toBe('block');
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].mode).toBe('annotate');
+    expect(result.annotateActive).toBe(true);
+  });
+});
