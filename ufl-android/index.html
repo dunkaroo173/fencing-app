@@ -1513,7 +1513,8 @@ function renderEventsList() {
   document.getElementById('ev-score-r').textContent = M.scoreR;
   const list = document.getElementById('ev-list');
   list.innerHTML = '';
-  M.events.forEach(ev => {
+  // Chronological view: workbench marks may be recorded out of order.
+  M.events.slice().sort((a, b) => overlayEventTime(a) - overlayEventTime(b)).forEach(ev => {
     const item  = document.createElement('div');
     item.className = 'ev-item';
     const side  = ev.side === 'L' ? 'l' : ev.side === 'R' ? 'r' : 'c';
@@ -3083,14 +3084,28 @@ function markReviewDecision(payload, status) {
   return true;
 }
 
+// Adjacency is by bout time, not array position: workbench marks can be
+// created out of chronological order when the user scrubs backwards.
 function adjacentReviewIndex(index, direction) {
-  if (!M || !Array.isArray(M.events) || M.events.length === 0) return -1;
-  const step = direction >= 0 ? 1 : -1;
-  for (let i = index + step; i >= 0 && i < M.events.length; i += step) {
-    const ev = M.events[i];
-    if (ev && (ev.side === 'L' || ev.side === 'R')) return i;
-  }
-  return -1;
+  if (!M || !Array.isArray(M.events) || !M.events[index]) return -1;
+  const forward = direction >= 0;
+  const curTime = overlayEventTime(M.events[index]);
+  let best = -1;
+  let bestTime = null;
+  M.events.forEach((ev, i) => {
+    if (!ev || (ev.side !== 'L' && ev.side !== 'R') || i === index) return;
+    const t = overlayEventTime(ev);
+    const isAfter = t > curTime || (t === curTime && i > index);
+    if (forward !== isAfter) return;
+    const better = best === -1 ||
+      (forward ? (t < bestTime || (t === bestTime && i < best))
+               : (t > bestTime || (t === bestTime && i > best)));
+    if (better) {
+      best = i;
+      bestTime = t;
+    }
+  });
+  return best;
 }
 
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});

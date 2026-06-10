@@ -1329,4 +1329,32 @@ test.describe('import annotation workbench', () => {
     expect(result.payloads[0].mode).toBe('annotate');
     expect(result.annotateActive).toBe(true);
   });
+
+  test('review navigation and events list follow bout time for out-of-order marks', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installWorkbenchMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      // Marks recorded out of order: 30s, then back at 8s, then 50s.
+      M.events = [
+        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 50, period: 1, side: 'L', actionId: 101, label: 'Compound', emoji: 'C', isHit: false },
+      ];
+      (window as any).renderEventsList();
+      const listTimes = Array.from(document.querySelectorAll('#ev-list .ev-ts')).map(el => el.textContent);
+      return {
+        listTimes,
+        nextAfter8: (window as any).adjacentReviewIndex(1, 1),   // 8s -> 30s (index 0)
+        prevBefore30: (window as any).adjacentReviewIndex(0, -1), // 30s -> 8s (index 1)
+        nextAfter50: (window as any).adjacentReviewIndex(2, 1),   // nothing later
+      };
+    });
+
+    expect(result.listTimes).toEqual(['0:08', '0:30', '0:50']);
+    expect(result.nextAfter8).toBe(0);
+    expect(result.prevBefore30).toBe(1);
+    expect(result.nextAfter50).toBe(-1);
+  });
 });
