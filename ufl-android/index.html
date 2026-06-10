@@ -1302,8 +1302,13 @@ function doConfirm(side, actionId, isHit) {
     recomputeMatchScoreFromEvents();
     if (typeof scheduleSave === 'function') scheduleSave();
     buildReport();
-    setOverlayStatus('Correction saved.', false);
-    setTimeout(() => startVideoReviewForIndex(editedIndex), 250);
+    const hasPendingReview = M.events.some(e2 => e2 && !e2.reviewed && (e2.side === 'L' || e2.side === 'R'));
+    if (hasPendingReview) {
+      setOverlayStatus('Correction saved.', false);
+      setTimeout(() => startVideoReviewForIndex(editedIndex), 250);
+    } else {
+      setOverlayStatus('Correction saved. All actions reviewed.', false);
+    }
     return;
   }
 
@@ -2833,7 +2838,7 @@ function adjacentReviewIndex(index, direction) {
     const ev = M.events[i];
     if (ev && (ev.side === 'L' || ev.side === 'R')) return i;
   }
-  return index;
+  return -1;
 }
 
 document.getElementById('exp-json').addEventListener('touchend', e=>{ e.preventDefault(); exportJSON(); },{passive:false});
@@ -3022,6 +3027,11 @@ window.onAndroidVideoReviewNavigate = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   const index = resolveReviewEventIndex(payload);
   const next = adjacentReviewIndex(index, Number(payload.direction));
+  if (next < 0 || next === index) {
+    // Nothing further in that direction — keep the current review open.
+    setOverlayStatus('No more actions in that direction.', false);
+    return;
+  }
   startVideoReviewForIndex(next);
 };
 

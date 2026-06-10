@@ -868,13 +868,12 @@ test.describe('native video review', () => {
     expect(result.restarted).toBe(true);
     expect(result.camState).toBe('recording');
     expect(result.recordingActive).toBe(true);
-    expect(result.reviewPayloads).toHaveLength(2);
+    // Only the initial review payload: correcting the last pending action no
+    // longer re-opens the review (it would loop with nothing left to review).
+    expect(result.reviewPayloads).toHaveLength(1);
     expect(result.reviewPayloads[0].sourceType).toBe('recorded');
     expect(result.reviewPayloads[0].sourceUri).toBe('content://recorded/review.mp4');
     expect(result.reviewPayloads[0].eventIndex).toBe(0);
-    expect(result.reviewPayloads[1].sourceType).toBe('recorded');
-    expect(result.reviewPayloads[1].eventIndex).toBe(0);
-    expect(result.reviewPayloads[1].title).toContain('BEAT ATTACK');
     expect(result.running).toBe(false);
     expect(result.corrected.side).toBe('L');
     expect(result.corrected.actionId).toBe(103);
@@ -942,5 +941,27 @@ test.describe('native video review', () => {
 
     expect(result.payloadEventId).toBeTruthy();
     expect(result.confirmed).toEqual(['Simple Attack:R']);
+  });
+
+  test('navigating past the last action keeps the current review open', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const payloads: any[] = [];
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewNavigate(JSON.stringify({ eventIndex: 0, direction: 1 }));
+      (window as any).onAndroidVideoReviewNavigate(JSON.stringify({ eventIndex: 0, direction: -1 }));
+      return { payloads };
+    });
+
+    expect(result.payloads).toHaveLength(0);
   });
 });
