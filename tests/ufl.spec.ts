@@ -972,4 +972,37 @@ test.describe('native video review', () => {
 
     expect(result.payloads).toHaveLength(0);
   });
+
+  test('importing while recording asks for confirmation first', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    // Same camera denial as the segmenting test above: a late getUserMedia
+    // rejection would reset the faked _camState before the guard is exercised.
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    });
+    await startMatch(page);
+    await page.waitForFunction(() => _camState === 'idle');
+
+    const result = await page.evaluate(() => {
+      let selectCalls = 0;
+      (window as any).AndroidVideo = {
+        exportOverlay() {},
+        selectVideo() { selectCalls++; },
+      };
+      _camState = 'recording';
+      const origConfirm = window.confirm;
+      window.confirm = () => false;
+      (window as any).openVideoPicker();
+      const afterDismiss = selectCalls;
+      window.confirm = () => true;
+      (window as any).openVideoPicker();
+      window.confirm = origConfirm;
+      _camState = 'idle';
+      return { afterDismiss, afterAccept: selectCalls };
+    });
+
+    expect(result.afterDismiss).toBe(0);
+    expect(result.afterAccept).toBe(1);
+  });
 });

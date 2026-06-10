@@ -1498,6 +1498,10 @@ function setVideoImportPending(pending) {
 }
 
 function openVideoPicker() {
+  if (_camState === 'recording' &&
+      !window.confirm('Recording in progress. Importing a video will stop the current recording. Continue?')) {
+    return;
+  }
   if (isAndroidNativeVideoAvailable()) {
     setVideoImportPending(true);
     setImportVideoStatus('Preparing selected video...');
