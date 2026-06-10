@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
 
         nativeImportPreview = new NativeImportPreview(this);
         nativeImportPreview.setVisibility(android.view.View.GONE);
-        nativeImportPreview.setAlpha(0.42f);
+        nativeImportPreview.setAlpha(1.0f);
         nativeImportPreview.setClickable(false);
         nativeImportPreview.setFocusable(false);
         nativeImportPreview.setCallback(new NativeImportPreview.Callback() {
@@ -324,6 +324,7 @@ public class MainActivity extends AppCompatActivity {
         payload.put("clipEnd", durationSec > 0 ? Math.min(durationSec, eventVideoTime + 2.0) : eventVideoTime + 2.0);
         payload.put("durationSec", durationSec);
         payload.put("playbackRate", 0.5);
+        payload.put("showReviewOverlay", false);
         payload.put("match", match);
         payload.put("title", "Native Video Review");
         return payload;

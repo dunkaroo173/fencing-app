@@ -308,6 +308,33 @@ test.describe('overlay video export', () => {
     expect(snap.recordingStartPeriodTs).toBeCloseTo(-2.7);
   });
 
+  test('recorded native export sends all recording segments for stitching', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const payload = await page.evaluate(() => {
+      (window as any).__exportPayload = null;
+      (window as any).AndroidVideo = {
+        exportOverlay(json: string) { (window as any).__exportPayload = JSON.parse(json); },
+      };
+      M.recordingSegments = [
+        { uri: 'content://recorded/first.mp4', savedUri: 'content://recorded/first.mp4', durationMs: 10000, startBoutTs: 0, sourceType: 'recorded' },
+        { uri: 'content://recorded/second.mp4', savedUri: 'content://recorded/second.mp4', durationMs: 12000, startBoutTs: 12, sourceType: 'recorded' },
+      ];
+      _nativeRecordedPayload = M.recordingSegments[1];
+      _nativeRecordedVideo = 'content://recorded/second.mp4';
+      (window as any).exportVideo();
+      return (window as any).__exportPayload;
+    });
+
+    expect(payload.sourceType).toBe('recorded');
+    expect(payload.sourceUri).toBe('content://recorded/first.mp4');
+    expect(payload.durationMs).toBe(22000);
+    expect(payload.segments).toHaveLength(2);
+    expect(payload.segments[0].startBoutTs).toBe(0);
+    expect(payload.segments[1].startBoutTs).toBe(12);
+  });
+
   test('ending a match stops active recording immediately', async ({ page }) => {
     await page.goto(APP_PATH);
     await startMatch(page);
@@ -512,6 +539,7 @@ test.describe('native video review', () => {
     expect(payload.clipStart).toBe(7);
     expect(payload.clipEnd).toBe(14);
     expect(payload.playbackRate).toBe(0.5);
+    expect(payload.showReviewOverlay).toBe(false);
     expect(payload.title).toContain('POINT IN LINE');
     expect(payload.match.nameL).toBe('LEFT');
     expect(payload.match.nameR).toBe('RIGHT');
@@ -519,7 +547,7 @@ test.describe('native video review', () => {
     expect(payload.match.events[1].label).toBe('Point in Line');
   });
 
-  test('review keep and correction preserve audit fields and recompute score', async ({ page }) => {
+  test('review done and correction preserve audit fields and recompute score', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);
 
@@ -594,5 +622,288 @@ test.describe('native video review', () => {
     expect(result.confirmVisible).toBe(false);
     expect(result.payload.eventIndex).toBe(0);
     expect(result.payload.sourceUri).toBe('content://review/source.mp4');
+    expect(result.payload.showReviewOverlay).toBe(false);
+  });
+
+  test('done confirms the current review and exits instead of auto-opening another action', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const payloads: any[] = [];
+      let closeCalls = 0;
+      (window as any).AndroidVideo = {
+        closeVideoReview() { closeCalls++; },
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 10, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventIndex: 1,
+        chosenTime: 10,
+        clipStart: 5,
+        clipEnd: 12,
+        playbackRate: 0.5,
+      }));
+      return {
+        closeCalls,
+        payloads,
+        reviewed: M.events[1].reviewed,
+        reviewStatus: M.events[1].reviewStatus,
+      };
+    });
+
+    expect(result.closeCalls).toBe(1);
+    expect(result.payloads).toHaveLength(0);
+    expect(result.reviewed).toBe(true);
+    expect(result.reviewStatus).toBe('confirmed');
+  });
+
+  test('imported video review resumes annotation after done', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).__resumeCalls = 0;
+      (window as any).AndroidVideo = {
+        exportOverlay() {},
+        closeVideoReview() {},
+        startVideoReview() {},
+        playImportedPreview() { (window as any).__resumeCalls++; },
+        pauseImportedPreview() {},
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      _importVideoFile = { name: 'source.mp4', nativeUri: 'content://review/source.mp4' } as any;
+      M.events = [
+        { ts: 9, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      M.running = true;
+      (window as any).startVideoReviewForIndex(0);
+      const stoppedForReview = M.running === false;
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 9,
+        clipStart: 4,
+        clipEnd: 11,
+        playbackRate: 0.5,
+      }));
+      const runningAfterDone = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
+      return {
+        stoppedForReview,
+        runningAfterDone,
+        resumeCalls: (window as any).__resumeCalls,
+        reviewStatus: M.events[0].reviewStatus,
+      };
+    });
+
+    expect(result.stoppedForReview).toBe(true);
+    expect(result.runningAfterDone).toBe(true);
+    expect(result.resumeCalls).toBeGreaterThan(0);
+    expect(result.reviewStatus).toBe('confirmed');
+  });
+
+  test('canceling a review correction returns to the same native review', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      const payloads: any[] = [];
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      (window as any).showConfirm('R', 200);
+      document.getElementById('conf-r-no')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return {
+        events: M.events,
+        payloads,
+        editIndex: _reviewEditIndex,
+        running: M.running,
+      };
+    });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].reviewStatus).toBeUndefined();
+    expect(result.events[0].actionId).toBe(200);
+    expect(result.events[0].isHit).toBe(true);
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].eventIndex).toBe(0);
+    expect(result.payloads[0].sourceUri).toBe('content://review/source.mp4');
+    expect(result.editIndex).toBeNull();
+    expect(result.running).toBe(false);
+  });
+
+  test('review correction can change the fencer side', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 210, label: 'Parry-Riposte', emoji: 'P', isHit: true },
+      ];
+      (window as any).recomputeMatchScoreFromEvents();
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.2,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      (window as any).doConfirm('L', 103, true);
+      return {
+        scoreL: M.scoreL,
+        scoreR: M.scoreR,
+        corrected: M.events[0],
+      };
+    });
+
+    expect(result.scoreL).toBe(1);
+    expect(result.scoreR).toBe(0);
+    expect(result.corrected.side).toBe('L');
+    expect(result.corrected.actionId).toBe(103);
+    expect(result.corrected.label).toBe('Beat Attack');
+    expect(result.corrected.originalSide).toBe('R');
+    expect(result.corrected.originalActionId).toBe(210);
+    expect(result.corrected.reviewStatus).toBe('corrected');
+  });
+
+  test('video review action segments active native recording and edit resumes recording', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      const reviewPayloads: any[] = [];
+      let stopped = false;
+      let prepared = false;
+      let restarted = false;
+      (window as any).AndroidVideo = {
+        prepareNativeRecording() {
+          prepared = true;
+          setTimeout(() => (window as any).onAndroidRecordingReady(), 0);
+        },
+        startNativeRecording() {
+          restarted = true;
+          setTimeout(() => (window as any).onAndroidRecordingStarted(), 0);
+        },
+        stopNativeRecording() {
+          stopped = true;
+          setTimeout(() => {
+            (window as any).onAndroidRecordingStopped(JSON.stringify({
+              sourceType: 'recorded',
+              uri: 'content://recorded/review.mp4',
+              savedUri: 'content://recorded/review.mp4',
+              displayName: 'review.mp4',
+              durationMs: 30000,
+              overlaid: true,
+            }));
+          }, 0);
+        },
+        closeVideoReview() {},
+        clearNativeRecordingPreview() {},
+        startVideoReview(json: string) { reviewPayloads.push(JSON.parse(json)); },
+      };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      M.recordingStartBoutTs = 0;
+      _camState = 'recording';
+      _nativeRecordingActive = true;
+      const launched = (window as any).startVideoReviewForIndex(0);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      await new Promise(resolve => {
+        const startedAt = Date.now();
+        const tick = () => {
+          if (_camState === 'recording' || Date.now() - startedAt > 1000) resolve(undefined);
+          else setTimeout(tick, 20);
+        };
+        tick();
+      });
+      (window as any).doConfirm('L', 103, true);
+      await new Promise(resolve => setTimeout(resolve, 320));
+      return {
+        launched,
+        stopped,
+        prepared,
+        restarted,
+        reviewPayloads,
+        camState: _camState,
+        recordingActive: _nativeRecordingActive,
+        running: M.running,
+        corrected: M.events[0],
+      };
+    });
+
+    expect(result.launched).toBe(true);
+    expect(result.stopped).toBe(true);
+    expect(result.prepared).toBe(true);
+    expect(result.restarted).toBe(true);
+    expect(result.camState).toBe('recording');
+    expect(result.recordingActive).toBe(true);
+    expect(result.reviewPayloads).toHaveLength(2);
+    expect(result.reviewPayloads[0].sourceType).toBe('recorded');
+    expect(result.reviewPayloads[0].sourceUri).toBe('content://recorded/review.mp4');
+    expect(result.reviewPayloads[0].eventIndex).toBe(0);
+    expect(result.reviewPayloads[1].sourceType).toBe('recorded');
+    expect(result.reviewPayloads[1].eventIndex).toBe(0);
+    expect(result.reviewPayloads[1].title).toContain('BEAT ATTACK');
+    expect(result.running).toBe(false);
+    expect(result.corrected.side).toBe('L');
+    expect(result.corrected.actionId).toBe(103);
+  });
+
+  test('recorded video review selects the segment containing the action timestamp', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const payload = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      M.events = [
+        { ts: 4, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 18, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      M.recordingSegments = [
+        { uri: 'content://recorded/first.mp4', savedUri: 'content://recorded/first.mp4', durationMs: 10000, startBoutTs: 0, sourceType: 'recorded' },
+        { uri: 'content://recorded/second.mp4', savedUri: 'content://recorded/second.mp4', durationMs: 10000, startBoutTs: 12, sourceType: 'recorded' },
+      ];
+      (window as any).startVideoReviewForIndex(1);
+      return (window as any).__reviewPayload;
+    });
+
+    expect(payload.sourceType).toBe('recorded');
+    expect(payload.sourceUri).toBe('content://recorded/second.mp4');
+    expect(payload.eventVideoTime).toBe(6);
+    expect(payload.clipStart).toBe(1);
   });
 });

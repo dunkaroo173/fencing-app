@@ -41,6 +41,8 @@ class NativeVideoReviewView extends FrameLayout {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final PlayerView playerView;
+    private final LinearLayout scoreStrip;
+    private final LinearLayout actionCard;
     private final TextView titleView;
     private final TextView leftScoreView;
     private final TextView timerView;
@@ -91,7 +93,7 @@ class NativeVideoReviewView extends FrameLayout {
         playerView.setUseController(false);
         addView(playerView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        LinearLayout scoreStrip = new LinearLayout(context);
+        scoreStrip = new LinearLayout(context);
         scoreStrip.setOrientation(LinearLayout.HORIZONTAL);
         scoreStrip.setGravity(Gravity.CENTER);
         scoreStrip.setPadding(dp(14), dp(5), dp(14), dp(5));
@@ -123,7 +125,7 @@ class NativeVideoReviewView extends FrameLayout {
         topParams.topMargin = dp(34);
         addView(top, topParams);
 
-        LinearLayout actionCard = new LinearLayout(context);
+        actionCard = new LinearLayout(context);
         actionCard.setOrientation(LinearLayout.VERTICAL);
         actionCard.setGravity(Gravity.LEFT);
         actionCard.setPadding(dp(10), dp(5), dp(10), dp(5));
@@ -147,6 +149,7 @@ class NativeVideoReviewView extends FrameLayout {
         actionCard.addView(actionSideView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         actionCard.addView(actionLabelView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         actionCard.addView(actionResultView, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        actionCard.setVisibility(GONE);
         LayoutParams actionParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT);
         actionParams.topMargin = dp(42);
         actionParams.leftMargin = dp(12);
@@ -171,37 +174,43 @@ class NativeVideoReviewView extends FrameLayout {
         speed025Button = button(context, "0.25x");
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
-        Button keep = button(context, "KEEP");
-        Button edit = button(context, "EDIT");
-        moreButton = button(context, "SEEK");
+        moreButton = button(context, "SEEK +", Color.rgb(70, 78, 96));
+        Button edit = button(context, "EDIT", Color.rgb(245, 156, 66));
+        Button keep = button(context, "DONE", Color.rgb(36, 190, 118));
         primaryControls.addView(replay);
         primaryControls.addView(playButton);
         primaryControls.addView(speed025Button);
         primaryControls.addView(speed05Button);
         primaryControls.addView(speed1Button);
-        primaryControls.addView(keep);
-        primaryControls.addView(edit);
         primaryControls.addView(moreButton);
+        primaryControls.addView(edit);
+        primaryControls.addView(keep);
         bottom.addView(primaryControls);
 
         advancedControls = new LinearLayout(context);
         advancedControls.setGravity(Gravity.CENTER);
-        advancedControls.setOrientation(LinearLayout.HORIZONTAL);
+        advancedControls.setOrientation(LinearLayout.VERTICAL);
+        advancedControls.setPadding(0, dp(3), 0, 0);
         advancedControls.setVisibility(GONE);
 
-        Button back2 = button(context, "-2s");
-        Button back1 = button(context, "-1s");
-        Button fwd1 = button(context, "+1s");
-        Button fwd2 = button(context, "+2s");
-        Button previous = button(context, "PREV");
-        Button next = button(context, "NEXT");
+        LinearLayout seekRow = controlRow(context, "NUDGE");
+        Button back2 = button(context, "-2s", Color.rgb(54, 125, 160));
+        Button back1 = button(context, "-1s", Color.rgb(54, 125, 160));
+        Button fwd1 = button(context, "+1s", Color.rgb(54, 125, 160));
+        Button fwd2 = button(context, "+2s", Color.rgb(54, 125, 160));
+        seekRow.addView(back2);
+        seekRow.addView(back1);
+        seekRow.addView(fwd1);
+        seekRow.addView(fwd2);
 
-        advancedControls.addView(back2);
-        advancedControls.addView(back1);
-        advancedControls.addView(fwd1);
-        advancedControls.addView(fwd2);
-        advancedControls.addView(previous);
-        advancedControls.addView(next);
+        LinearLayout actionRow = controlRow(context, "ACTION");
+        Button previous = button(context, "PREV", Color.rgb(70, 78, 96));
+        Button next = button(context, "NEXT", Color.rgb(70, 78, 96));
+        actionRow.addView(previous);
+        actionRow.addView(next);
+
+        advancedControls.addView(seekRow);
+        advancedControls.addView(actionRow);
         bottom.addView(advancedControls);
 
         LayoutParams bottomParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
@@ -267,6 +276,9 @@ class NativeVideoReviewView extends FrameLayout {
             if (durationSec > 0) clipEndSec = Math.min(durationSec, clipEndSec);
             clipEndSec = Math.max(clipStartSec + 0.5, clipEndSec);
             playbackRate = payload.optDouble("playbackRate", 0.5);
+            boolean showReviewOverlay = payload.optBoolean("showReviewOverlay", false);
+            scoreStrip.setVisibility(showReviewOverlay ? VISIBLE : GONE);
+            actionCard.setVisibility(showReviewOverlay ? VISIBLE : GONE);
 
             applyReviewContext(payload);
 
@@ -286,7 +298,7 @@ class NativeVideoReviewView extends FrameLayout {
             player.seekTo(secondsToMs(clipStartSec));
             setVisibility(VISIBLE);
             advancedControls.setVisibility(GONE);
-            moreButton.setText("SEEK");
+            moreButton.setText("SEEK +");
             updateSpeedButtons();
             handler.removeCallbacks(ticker);
             handler.post(ticker);
@@ -332,7 +344,7 @@ class NativeVideoReviewView extends FrameLayout {
     private void toggleMoreControls() {
         boolean show = advancedControls.getVisibility() != VISIBLE;
         advancedControls.setVisibility(show ? VISIBLE : GONE);
-        moreButton.setText(show ? "HIDE" : "SEEK");
+        moreButton.setText(show ? "SEEK -" : "SEEK +");
     }
 
     private void shift(double deltaSec) {
@@ -488,6 +500,10 @@ class NativeVideoReviewView extends FrameLayout {
     }
 
     private Button button(Context context, String text) {
+        return button(context, text, Color.rgb(58, 65, 82));
+    }
+
+    private Button button(Context context, String text, int accentColor) {
         Button button = new Button(context);
         button.setText(text);
         button.setTextColor(Color.WHITE);
@@ -496,7 +512,24 @@ class NativeVideoReviewView extends FrameLayout {
         button.setPadding(dp(5), dp(2), dp(5), dp(2));
         button.setMinWidth(dp(52));
         button.setMinHeight(dp(34));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.argb(145, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)));
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), accentColor);
+        button.setBackground(bg);
         return button;
+    }
+
+    private LinearLayout controlRow(Context context, String labelText) {
+        LinearLayout row = new LinearLayout(context);
+        row.setGravity(Gravity.CENTER);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView label = label(context, 9, Color.rgb(185, 192, 210));
+        label.setText(labelText);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        label.setGravity(Gravity.CENTER);
+        row.addView(label, new LinearLayout.LayoutParams(dp(58), LayoutParams.WRAP_CONTENT));
+        return row;
     }
 
     private int dp(int value) {

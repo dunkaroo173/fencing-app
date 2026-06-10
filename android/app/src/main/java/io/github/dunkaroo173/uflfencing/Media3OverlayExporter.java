@@ -17,13 +17,16 @@ import androidx.media3.effect.CanvasOverlay;
 import androidx.media3.effect.OverlayEffect;
 import androidx.media3.transformer.Composition;
 import androidx.media3.transformer.EditedMediaItem;
+import androidx.media3.transformer.EditedMediaItemSequence;
 import androidx.media3.transformer.Effects;
 import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
 import androidx.media3.transformer.ProgressHolder;
 import androidx.media3.transformer.Transformer;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,12 +44,14 @@ class Media3OverlayExporter {
     }
 
     NativeOverlayExporter.Result export(JSONObject payload) throws Exception {
-        Uri sourceUri = Uri.parse(payload.getString("sourceUri"));
+        JSONArray segments = payload.optJSONArray("segments");
+        boolean hasSegments = segments != null && segments.length() > 0;
+        Uri sourceUri = hasSegments ? null : Uri.parse(payload.getString("sourceUri"));
         JSONObject match = payload.getJSONObject("match");
         String filenameBase = safeFilePart(payload.optString("filenameBase", "match-overlay"));
         double timeOffset = payload.optDouble("timeOffset", 0.0);
         boolean useRecordingPauses = payload.optBoolean("useRecordingPauses", false);
-        long fallbackDurationMs = Math.max(0L, payload.optLong("durationMs", 0L));
+        long fallbackDurationMs = hasSegments ? segmentsDurationMs(segments) : Math.max(0L, payload.optLong("durationMs", 0L));
 
         File outDir = new File(context.getCacheDir(), "native-video-exports");
         if (!outDir.exists()) outDir.mkdirs();
@@ -63,14 +68,28 @@ class Media3OverlayExporter {
         callback.onProgress(0.02, "Preparing Media3 overlay export");
         handler.post(() -> {
             try {
-                FencingCanvasOverlay overlay = new FencingCanvasOverlay(match, timeOffset, useRecordingPauses);
+                FencingCanvasOverlay overlay = hasSegments
+                        ? new FencingCanvasOverlay(match, segments)
+                        : new FencingCanvasOverlay(match, timeOffset, useRecordingPauses);
                 Effects effects = new Effects(
                         Collections.emptyList(),
                         Collections.singletonList(new OverlayEffect(Collections.singletonList(overlay)))
                 );
-                EditedMediaItem edited = new EditedMediaItem.Builder(MediaItem.fromUri(sourceUri))
+                EditedMediaItem edited = hasSegments ? null : new EditedMediaItem.Builder(MediaItem.fromUri(sourceUri))
                         .setEffects(effects)
                         .build();
+                Composition composition = null;
+                if (hasSegments) {
+                    List<EditedMediaItem> items = new ArrayList<>();
+                    for (int i = 0; i < segments.length(); i++) {
+                        JSONObject segment = segments.optJSONObject(i);
+                        if (segment == null || segment.optString("uri", "").isEmpty()) continue;
+                        items.add(new EditedMediaItem.Builder(MediaItem.fromUri(Uri.parse(segment.optString("uri")))).build());
+                    }
+                    if (items.isEmpty()) throw new IllegalArgumentException("No recording segments available for export");
+                    EditedMediaItemSequence sequence = new EditedMediaItemSequence.Builder(items).build();
+                    composition = new Composition.Builder(sequence).setEffects(effects).build();
+                }
                 Transformer transformer = new Transformer.Builder(context)
                         .setLooper(thread.getLooper())
                         .setVideoMimeType(MimeTypes.VIDEO_H264)
@@ -92,7 +111,8 @@ class Media3OverlayExporter {
                         .build();
                 transformerRef.set(transformer);
                 scheduleProgress(handler, transformer, done);
-                transformer.start(edited, output.getAbsolutePath());
+                if (composition != null) transformer.start(composition, output.getAbsolutePath());
+                else transformer.start(edited, output.getAbsolutePath());
             } catch (Exception e) {
                 errorRef.set(e);
                 done.countDown();
@@ -142,8 +162,19 @@ class Media3OverlayExporter {
         return s.isEmpty() ? "match-overlay" : s;
     }
 
+    private static long segmentsDurationMs(JSONArray segments) {
+        long total = 0L;
+        if (segments == null) return 0L;
+        for (int i = 0; i < segments.length(); i++) {
+            JSONObject segment = segments.optJSONObject(i);
+            if (segment != null) total += Math.max(0L, segment.optLong("durationMs", 0L));
+        }
+        return total;
+    }
+
     private static class FencingCanvasOverlay extends CanvasOverlay {
         private final JSONObject match;
+        private final JSONArray segments;
         private final double timeOffset;
         private final boolean useRecordingPauses;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -151,8 +182,17 @@ class Media3OverlayExporter {
         FencingCanvasOverlay(JSONObject match, double timeOffset, boolean useRecordingPauses) {
             super(true);
             this.match = match;
+            this.segments = null;
             this.timeOffset = timeOffset;
             this.useRecordingPauses = useRecordingPauses;
+        }
+
+        FencingCanvasOverlay(JSONObject match, JSONArray segments) {
+            super(true);
+            this.match = match;
+            this.segments = segments;
+            this.timeOffset = 0.0;
+            this.useRecordingPauses = true;
         }
 
         @Override
@@ -311,9 +351,43 @@ class Media3OverlayExporter {
         }
 
         private double videoTimeToBoutTime(double videoTime) {
-            double boutTime = videoTime + timeOffset;
-            if (!useRecordingPauses) return boutTime;
-            JSONArray pauses = match.optJSONArray("recordingPauses");
+            if (segments != null && segments.length() > 0) {
+                double cursor = 0.0;
+                JSONObject fallback = null;
+                double fallbackCursor = 0.0;
+                for (int i = 0; i < segments.length(); i++) {
+                    JSONObject segment = segments.optJSONObject(i);
+                    if (segment == null) continue;
+                    double duration = Math.max(0.0, segment.optDouble("durationMs", 0.0) / 1000.0);
+                    fallback = segment;
+                    fallbackCursor = cursor;
+                    if (duration <= 0.0 || videoTime <= cursor + duration || i == segments.length() - 1) {
+                        return segmentVideoTimeToBoutTime(
+                                Math.max(0.0, videoTime - cursor),
+                                segment.optDouble("startBoutTs", 0.0),
+                                segment.optJSONArray("pauses")
+                        );
+                    }
+                    cursor += duration;
+                }
+                if (fallback != null) {
+                    return segmentVideoTimeToBoutTime(
+                            Math.max(0.0, videoTime - fallbackCursor),
+                            fallback.optDouble("startBoutTs", 0.0),
+                            fallback.optJSONArray("pauses")
+                    );
+                }
+            }
+
+            return segmentVideoTimeToBoutTime(
+                    videoTime,
+                    timeOffset,
+                    useRecordingPauses ? match.optJSONArray("recordingPauses") : null
+            );
+        }
+
+        private double segmentVideoTimeToBoutTime(double videoTime, double offset, JSONArray pauses) {
+            double boutTime = videoTime + offset;
             if (pauses == null) return boutTime;
             double pausedTotal = 0;
             for (int i = 0; i < pauses.length(); i++) {
@@ -323,7 +397,7 @@ class Media3OverlayExporter {
                 double end = pause.optDouble("endVideo", Double.NaN);
                 if (!Double.isFinite(start) || !Double.isFinite(end) || end <= start) continue;
                 if (videoTime <= start) break;
-                double freeze = Math.max(pause.optDouble("boutTime", start + timeOffset - pausedTotal), start + timeOffset - pausedTotal);
+                double freeze = Math.max(pause.optDouble("boutTime", start + offset - pausedTotal), start + offset - pausedTotal);
                 if (videoTime < end) return freeze;
                 pausedTotal += end - start;
             }

@@ -80,7 +80,7 @@ body.android-native-preview #s-match{background:transparent}
 .priority-badge.on{display:inline}
 .operate{flex:1;position:relative;overflow:hidden}
 body.android-native-preview .operate{background:transparent}
-body.android-native-preview .operate::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,0.46);z-index:1;pointer-events:none}
+body.android-native-preview .operate::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,0.18);z-index:1;pointer-events:none}
 body.android-native-preview .hud{background:rgba(0,0,0,0.96);box-shadow:0 8px 30px rgba(0,0,0,0.75)}
 body.android-native-preview .cards-strip,
 body.android-native-preview .hint-pill,
@@ -625,6 +625,7 @@ function newMatchState(cfg) {
     recordingStartPeriod: null,
     recordingStartPeriodTs: null,
     recordingPauses: [],
+    recordingSegments: [],
     startTime: null,
     elapsedMs: 0,
   };
@@ -1127,7 +1128,13 @@ function closePie(side, resume = true){
   wrap.addEventListener('pointerup',  _radPtrUp,  {passive:false});
   wrap.addEventListener('pointercancel',()=>{if(_radEls.length)_radSetHov(null);},{passive:false});
   document.getElementById('radial-cancel').addEventListener('touchend',e=>{
-    e.preventDefault(); if(_radSide!==null)closePie(_radSide);
+    e.preventDefault();
+    if(_reviewEditIndex!==null){
+      const canceled = returnToVideoReviewAfterCorrectionCancel();
+      if(_radSide!==null)closePie(_radSide,false);
+      if(canceled)return;
+    }
+    if(_radSide!==null)closePie(_radSide);
   },{passive:false});
 })();
 
@@ -1148,9 +1155,13 @@ function showConfirm(side, actionId) {
   const action   = ACTIONS[actionId];
   const s        = side === 'L' ? 'l' : 'r';
   const needsChoice = action && !NO_HIT_CHOICE.has(actionId);
+  const isReviewCorrection = _reviewEditIndex !== null;
 
   document.getElementById(`conf-${s}-icon`).textContent  = action ? action.emoji : '?';
   document.getElementById(`conf-${s}-label`).textContent = action ? action.label.toUpperCase() : '';
+  document.getElementById(`conf-${s}-hit`).textContent       = isReviewCorrection ? '🎯 SAVE HIT' : '🎯 HIT';
+  document.getElementById(`conf-${s}-off`).textContent       = isReviewCorrection ? '🟡 SAVE OFF TARGET' : '🟡 OFF TARGET';
+  document.getElementById(`conf-${s}-yes`).textContent       = isReviewCorrection ? '✓ SAVE' : '✓ CONFIRM';
   document.getElementById(`conf-${s}-hit`).style.display       = needsChoice ? 'block' : 'none';
   document.getElementById(`conf-${s}-off`).style.display       = needsChoice ? 'block' : 'none';
   document.getElementById(`conf-${s}-yes`).style.display       = needsChoice ? 'none'  : 'block';
@@ -1166,6 +1177,16 @@ function hideConfirm() {
   document.getElementById('conf-r').classList.remove('on');
   document.getElementById('hint-pill').classList.remove('on');
   _pendingAction = null;
+}
+
+function returnToVideoReviewAfterCorrectionCancel() {
+  if (_reviewEditIndex === null) return false;
+  const index = _reviewEditIndex;
+  _reviewEditIndex = null;
+  _reviewEditMeta = null;
+  setOverlayStatus('Correction canceled.', false);
+  setTimeout(() => startVideoReviewForIndex(index), 120);
+  return true;
 }
 
 ['l','r'].forEach(s => {
@@ -1190,7 +1211,10 @@ function hideConfirm() {
   }, {passive:false});
   // Cancel
   document.getElementById(`conf-${s}-no`).addEventListener('touchend', e => {
-    e.preventDefault(); hideConfirm(); if (!M.finished) startTimer();
+    e.preventDefault();
+    hideConfirm();
+    if (returnToVideoReviewAfterCorrectionCancel()) return;
+    if (!M.finished) startTimer();
   }, {passive:false});
 });
 
@@ -1232,12 +1256,17 @@ function doConfirm(side, actionId, isHit) {
 
   if (_reviewEditIndex !== null && M.events[_reviewEditIndex]) {
     const old = M.events[_reviewEditIndex];
+    const adjustedTime = Number.isFinite(Number(_reviewEditMeta && _reviewEditMeta.chosenBoutTime))
+      ? periodTimeFromBoutTime(Number(_reviewEditMeta.chosenBoutTime))
+      : { period: old.period, ts: old.ts };
     const originalActionId = old.originalActionId !== undefined ? old.originalActionId : old.actionId;
     const originalLabel = old.originalLabel !== undefined ? old.originalLabel : old.label;
     const originalIsHit = old.originalIsHit !== undefined ? old.originalIsHit : old.isHit;
     const originalSide = old.originalSide !== undefined ? old.originalSide : old.side;
     M.events[_reviewEditIndex] = {
       ...old,
+      ts: adjustedTime.ts,
+      period: adjustedTime.period,
       side: ev.side,
       actionId: ev.actionId,
       label: ev.label,
@@ -1264,7 +1293,7 @@ function doConfirm(side, actionId, isHit) {
     recomputeMatchScoreFromEvents();
     if (typeof scheduleSave === 'function') scheduleSave();
     buildReport();
-    setOverlayStatus('Review correction saved.', false);
+    setOverlayStatus('Correction saved.', false);
     setTimeout(() => startVideoReviewForIndex(editedIndex), 250);
     return;
   }
@@ -1352,6 +1381,11 @@ let _nativeRecordingReadyPromise = null;
 let _nativeRecordingReadyResolver = null;
 let _reviewEditIndex = null;
 let _reviewEditMeta = null;
+let _pendingVideoReviewIndexAfterRecording = null;
+let _resumeRecordingAfterVideoReview = false;
+let _resumeImportedAfterVideoReview = false;
+let _reviewStartedFromRecording = false;
+let _activeVideoReviewSource = null;
 let _isRenderingOverlay = false;
 let _videoImportPending = false;
 
@@ -1602,6 +1636,25 @@ function stopActiveRecording(opts = {}) {
   return true;
 }
 
+async function restartNativeRecordingAfterReview(opts = {}) {
+  if (!isAndroidNativeRecordingAvailable() || _camState !== 'idle' || !_resumeRecordingAfterVideoReview) return false;
+  try {
+    _resumeRecordingAfterVideoReview = false;
+    setOverlayStatus('Restarting recording.', true);
+    await toggleCamera();
+    if (_camState === 'preview') {
+      _nativePendingRecordingStartBoutElapsed = currentBoutElapsed();
+      await toggleCamera();
+    }
+    if (opts.resumeTimer && M && !M.finished) startTimer();
+    return _camState === 'recording';
+  } catch (err) {
+    _resumeRecordingAfterVideoReview = false;
+    setOverlayStatus(err && err.message ? err.message : 'Could not restart recording.', false);
+    return false;
+  }
+}
+
 function recordingVideoElapsed() {
   return _recPerfStart === null ? 0 : Math.max(0, (performance.now() - _recPerfStart) / 1000);
 }
@@ -1628,6 +1681,24 @@ function noteRecordingClockResume() {
   _recPauseOpen = null;
   if (typeof scheduleSave === 'function') scheduleSave();
   syncNativeRecordingOverlay();
+}
+
+function rememberRecordingSegment(payload) {
+  if (!M || !payload || !(payload.uri || payload.savedUri)) return null;
+  if (!Array.isArray(M.recordingSegments)) M.recordingSegments = [];
+  const durationMs = Math.max(0, Number(payload.durationMs || 0));
+  const segment = {
+    uri: payload.uri || payload.savedUri,
+    savedUri: payload.savedUri || payload.uri,
+    displayName: payload.displayName || 'recording.mp4',
+    durationMs,
+    startBoutTs: Number(_recBoutStart) || 0,
+    pauses: Array.isArray(M.recordingPauses) ? M.recordingPauses.map(p => ({ ...p })) : [],
+    sourceType: 'recorded',
+  };
+  M.recordingSegments.push(segment);
+  if (typeof scheduleSave === 'function') scheduleSave();
+  return segment;
 }
 
 function rrect(ctx, x, y, w, h, r) {
@@ -1815,18 +1886,30 @@ function overlayEventTime(ev) {
   return (period - 1) * (Number(M.periodDuration) || 0) + (Number(ev.ts) || 0);
 }
 
+function periodTimeFromBoutTime(boutTime) {
+  const periodDuration = Math.max(1, Number(M?.periodDuration) || 180);
+  const totalPeriods = Math.max(1, Number(M?.totalPeriods) || 1);
+  const clamped = Math.max(0, Number(boutTime) || 0);
+  const period = Math.min(totalPeriods, Math.max(1, Math.floor(clamped / periodDuration) + 1));
+  return {
+    period,
+    ts: Math.max(0, clamped - (period - 1) * periodDuration),
+  };
+}
+
 function currentBoutElapsed() {
   if (!M) return 0;
   return (Math.max(1, Number(M.period) || 1) - 1) * (Number(M.periodDuration) || 0) +
          ((Number(M.periodDuration) || 0) - (Number(M.timerSec) || 0));
 }
 
-function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
+function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses, pausesOverride) {
   const t = Number(videoTime) || 0;
   let boutTime = t + (Number(timeOffset) || 0);
-  if (!useRecordingPauses || !M || !Array.isArray(M.recordingPauses)) return boutTime;
+  const pausesSource = Array.isArray(pausesOverride) ? pausesOverride : (M ? M.recordingPauses : null);
+  if (!useRecordingPauses || !Array.isArray(pausesSource)) return boutTime;
 
-  const pauses = M.recordingPauses
+  const pauses = pausesSource
     .map(p => ({
       startVideo: Number(p.startVideo),
       endVideo: Number(p.endVideo),
@@ -1854,14 +1937,15 @@ function videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses) {
   return boutTime - pausedTotal;
 }
 
-function boutTimeToVideoTime(boutTime, timeOffset, useRecordingPauses) {
+function boutTimeToVideoTime(boutTime, timeOffset, useRecordingPauses, pausesOverride) {
   const target = Number(boutTime) || 0;
   const offset = Number(timeOffset) || 0;
-  if (!useRecordingPauses || !M || !Array.isArray(M.recordingPauses)) {
+  const pausesSource = Array.isArray(pausesOverride) ? pausesOverride : (M ? M.recordingPauses : null);
+  if (!useRecordingPauses || !Array.isArray(pausesSource)) {
     return Math.max(0, target - offset);
   }
 
-  const pauses = M.recordingPauses
+  const pauses = pausesSource
     .map(p => ({
       startVideo: Number(p.startVideo),
       endVideo: Number(p.endVideo),
@@ -1910,6 +1994,7 @@ function markRecordingStart(boutElapsed) {
   _nativeRecordedVideo = null;
   _nativeRecordedPayload = null;
   if (M) {
+    if (!Array.isArray(M.recordingSegments)) M.recordingSegments = [];
     M.recordingStartBoutTs = _recBoutStart;
     M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
     M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
@@ -2171,6 +2256,29 @@ async function toggleCamera() {
       const shouldExportNow = !_autoStop;
       _autoStop = false;
       resetCamUI();
+      if (_pendingVideoReviewIndexAfterRecording !== null && isAndroidVideoReviewAvailable()) {
+        const reviewIndex = _pendingVideoReviewIndexAfterRecording;
+        _pendingVideoReviewIndexAfterRecording = null;
+        setOverlayStatus('Preparing video review.', true);
+        blobToNativeSource(_recBlob, overlayFilename('recorded-source', 'webm'))
+          .then(uri => {
+            _nativeRecordedVideo = uri;
+            _nativeRecordedPayload = {
+              uri,
+              savedUri: uri,
+              displayName: 'recorded-source.webm',
+              durationMs: Math.max(0, Math.round(_recDurationSec * 1000)),
+              sourceType: 'recorded',
+            };
+            startVideoReviewForIndex(reviewIndex);
+          })
+          .catch(err => {
+            _pendingVideoReviewIndexAfterRecording = null;
+            _resumeRecordingAfterVideoReview = false;
+            setOverlayStatus(err && err.message ? err.message : 'Could not prepare video review.', false);
+          });
+        return;
+      }
       if (shouldExportNow) exportVideo();
     };
     markRecordingStart();
@@ -2234,6 +2342,14 @@ function nativeOverlayPayload(sourceType, sourceUri, opts = {}) {
   };
   if (Number.isFinite(Number(opts.durationMs)) && Number(opts.durationMs) > 0) {
     payload.durationMs = Math.round(Number(opts.durationMs));
+  }
+  if (Array.isArray(opts.segments) && opts.segments.length) {
+    payload.segments = opts.segments.map(segment => ({
+      uri: segment.uri || segment.savedUri,
+      durationMs: Math.max(0, Math.round(Number(segment.durationMs || 0))),
+      startBoutTs: Number(segment.startBoutTs) || 0,
+      pauses: Array.isArray(segment.pauses) ? segment.pauses : [],
+    }));
   }
   return payload;
 }
@@ -2449,35 +2565,35 @@ function exportTXT() {
 }
 
 function exportVideo() {
-  if (_nativeRecordedPayload && _nativeRecordedPayload.overlaid) {
-    setOverlayStatus(`Overlay video saved as ${_nativeRecordedPayload.displayName || 'recording.mp4'}.`, false);
-    if (_nativeRecordedPayload.uri && window.AndroidVideo && typeof AndroidVideo.shareExport === 'function') {
-      AndroidVideo.shareExport(_nativeRecordedPayload.uri, _nativeRecordedPayload.displayName || 'recording.mp4');
-    }
-    return;
-  }
-  if (!_recBlob) return;
+  if (!_recBlob && !_nativeRecordedPayload && !_nativeRecordedVideo) return;
+  const segments = M && Array.isArray(M.recordingSegments) ? M.recordingSegments : [];
   const start = M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined
     ? Number(M.recordingStartBoutTs)
     : _recBoutStart;
   if (isAndroidNativeVideoAvailable()) {
-    exportRecordedOverlayNative(start);
+    exportRecordedOverlayNative(start, segments);
     return;
   }
   exportRenderedOverlay(_recBlob, 'recorded', { timeOffset: start, useRecordingPauses: true });
 }
 
-async function exportRecordedOverlayNative(start) {
+async function exportRecordedOverlayNative(start, segments = []) {
   if (_isRenderingOverlay) return;
   _isRenderingOverlay = true;
   setOverlayStatus('Preparing native recorded export.', true);
   try {
-    const sourceUri = _nativeRecordedVideo || await blobToNativeSource(_recBlob, overlayFilename('recorded-source', 'webm'));
+    const cleanSegments = (segments || []).filter(segment => segment && (segment.uri || segment.savedUri));
+    const sourceUri = cleanSegments.length
+      ? (cleanSegments[0].uri || cleanSegments[0].savedUri)
+      : (_nativeRecordedVideo || await blobToNativeSource(_recBlob, overlayFilename('recorded-source', 'webm')));
     _nativeRecordedVideo = sourceUri;
     AndroidVideo.exportOverlay(JSON.stringify(nativeOverlayPayload('recorded', sourceUri, {
       timeOffset: start,
       useRecordingPauses: true,
-      durationMs: Math.round((_recDurationSec || 0) * 1000),
+      durationMs: cleanSegments.length
+        ? cleanSegments.reduce((sum, segment) => sum + Math.max(0, Number(segment.durationMs || 0)), 0)
+        : Math.round((_recDurationSec || 0) * 1000),
+      segments: cleanSegments,
     })));
   } catch (err) {
     _isRenderingOverlay = false;
@@ -2523,7 +2639,34 @@ function isAndroidVideoReviewAvailable() {
   return !!(window.AndroidVideo && typeof AndroidVideo.startVideoReview === 'function');
 }
 
-function videoReviewSource() {
+function recordedSegmentForBoutTime(boutTime) {
+  if (!M || !Array.isArray(M.recordingSegments) || !M.recordingSegments.length) return null;
+  const target = Number(boutTime) || 0;
+  let fallback = null;
+  for (const segment of M.recordingSegments) {
+    if (!segment || !(segment.uri || segment.savedUri)) continue;
+    const start = Number(segment.startBoutTs) || 0;
+    const durationSec = Math.max(0, Number(segment.durationMs || 0) / 1000);
+    const end = start + durationSec;
+    if (target >= start - 0.05 && (durationSec <= 0 || target <= end + 0.25)) return segment;
+    if (start <= target) fallback = segment;
+  }
+  return fallback || M.recordingSegments[M.recordingSegments.length - 1];
+}
+
+function sourceFromRecordedSegment(segment) {
+  if (!segment) return null;
+  return {
+    uri: segment.uri || segment.savedUri,
+    durationSec: Number(segment.durationMs || 0) / 1000,
+    timeOffset: Number(segment.startBoutTs) || 0,
+    useRecordingPauses: true,
+    pauses: Array.isArray(segment.pauses) ? segment.pauses : [],
+    sourceType: 'recorded',
+  };
+}
+
+function videoReviewSource(index = latestReviewableEventIndex()) {
   if (_nativeImportVideo && _nativeImportVideo.uri) {
     return {
       uri: _nativeImportVideo.uri,
@@ -2533,6 +2676,10 @@ function videoReviewSource() {
       sourceType: 'imported',
     };
   }
+  const event = M && M.events && index >= 0 ? M.events[index] : null;
+  const segment = event ? recordedSegmentForBoutTime(overlayEventTime(event)) : null;
+  const segmentSource = sourceFromRecordedSegment(segment);
+  if (segmentSource) return segmentSource;
   if (_nativeRecordedPayload && (_nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri)) {
     return {
       uri: _nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri,
@@ -2574,20 +2721,34 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
     setOverlayStatus('Native video review is available only in the Android app.', false);
     return false;
   }
-  const source = videoReviewSource();
+  const source = (_reviewStartedFromRecording && _activeVideoReviewSource)
+    ? _activeVideoReviewSource
+    : videoReviewSource(index);
   if (!source || !source.uri) {
+    if (_camState === 'recording') {
+      _pendingVideoReviewIndexAfterRecording = index;
+      _resumeRecordingAfterVideoReview = true;
+      _reviewStartedFromRecording = true;
+      setOverlayStatus('Preparing video review.', true);
+      stopActiveRecording({ autoStop: true });
+      return true;
+    }
     setOverlayStatus('No source video available for review. Import a video or record a bout first.', false);
     return false;
   }
   const ev = M.events[index];
   const eventBoutTime = overlayEventTime(ev);
-  const eventVideoTime = boutTimeToVideoTime(eventBoutTime, source.timeOffset, source.useRecordingPauses);
+  const eventVideoTime = boutTimeToVideoTime(eventBoutTime, source.timeOffset, source.useRecordingPauses, source.pauses);
   const clipStart = Math.max(0, eventVideoTime - 5);
   const clipEnd = source.durationSec > 0 ? Math.min(source.durationSec, eventVideoTime + 2) : eventVideoTime + 2;
   const match = snapshotMatchForOverlay(M);
+  if (source.sourceType === 'imported' && M && M.running) {
+    _resumeImportedAfterVideoReview = true;
+  }
   stopTimer();
   closeDrawer();
   try {
+    if (_reviewStartedFromRecording) _activeVideoReviewSource = source;
     AndroidVideo.startVideoReview(JSON.stringify({
       sourceUri: source.uri,
       sourceType: source.sourceType,
@@ -2597,6 +2758,7 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
       clipEnd,
       durationSec: source.durationSec,
       playbackRate: ev.videoReview && ev.videoReview.playbackRate ? ev.videoReview.playbackRate : 0.5,
+      showReviewOverlay: false,
       match,
       title: eventReviewTitle(ev, index),
     }));
@@ -2689,7 +2851,7 @@ window.onAndroidExportComplete = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   _isRenderingOverlay = false;
   if (payload.savedUri) {
-    setOverlayStatus(`Native overlay saved to Movies/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
+    setOverlayStatus(`Native overlay saved to Photos/DCIM/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
     return;
   }
   setOverlayStatus('Native overlay rendered.', false);
@@ -2728,10 +2890,22 @@ window.onAndroidRecordingStopped = function(payloadJson) {
   _nativeRecordedPayload = payload;
   _nativeRecordedVideo = payload.uri || payload.savedUri || null;
   _recDurationSec = payload.durationMs ? payload.durationMs / 1000 : recordingVideoElapsed();
+  const segment = rememberRecordingSegment(payload);
+  if (segment) {
+    _nativeRecordedPayload = segment;
+    _nativeRecordedVideo = segment.uri || segment.savedUri || null;
+  }
   const shouldExportNow = !_autoStop;
   _autoStop = false;
   resetCamUI();
-  setOverlayStatus(`Overlay video saved to Movies/UFL Fencing as ${payload.displayName || 'recording.mp4'}.`, false);
+  if (_pendingVideoReviewIndexAfterRecording !== null) {
+    const reviewIndex = _pendingVideoReviewIndexAfterRecording;
+    _pendingVideoReviewIndexAfterRecording = null;
+    setOverlayStatus('Opening video review.', true);
+    startVideoReviewForIndex(reviewIndex);
+    return;
+  }
+  setOverlayStatus('Recording segment ready.', false);
   if (shouldExportNow) exportVideo();
 };
 
@@ -2755,13 +2929,20 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   if (!markReviewDecision(payload, 'confirmed')) return;
   setOverlayStatus('Action confirmed in video review.', false);
-  const next = adjacentReviewIndex(Number(payload.eventIndex), -1);
-  if (next !== Number(payload.eventIndex)) {
-    startVideoReviewForIndex(next);
-  } else {
-    try {
-      if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
-    } catch (_) {}
+  try {
+    if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
+  } catch (_) {}
+  if (_resumeRecordingAfterVideoReview) {
+    _reviewStartedFromRecording = false;
+    _activeVideoReviewSource = null;
+    restartNativeRecordingAfterReview({ resumeTimer: true });
+  } else if (_resumeImportedAfterVideoReview) {
+    _resumeImportedAfterVideoReview = false;
+    if (M && !M.finished) startTimer();
+  } else if (_reviewStartedFromRecording) {
+    _reviewStartedFromRecording = false;
+    _activeVideoReviewSource = null;
+    if (M && !M.finished) startTimer();
   }
 };
 
@@ -2769,20 +2950,33 @@ window.onAndroidVideoReviewEdit = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   const index = Number(payload.eventIndex);
   if (!M || !M.events || !M.events[index]) return;
-  const ev = M.events[index];
+  const source = (_reviewStartedFromRecording && _activeVideoReviewSource)
+    ? _activeVideoReviewSource
+    : videoReviewSource(index);
+  const chosenTime = Number(payload.chosenTime);
   _reviewEditIndex = index;
   _reviewEditMeta = {
     clipStart: Number(payload.clipStart),
     clipEnd: Number(payload.clipEnd),
-    chosenTime: Number(payload.chosenTime),
+    chosenTime,
+    chosenBoutTime: source
+      ? videoTimeToBoutTime(chosenTime, source.timeOffset, source.useRecordingPauses, source.pauses)
+      : undefined,
     playbackRate: Number(payload.playbackRate) || 0.5,
   };
+  _lastAction = null;
+  _lastActionAt = 0;
   try {
     if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
   } catch (_) {}
   showScreen('s-match');
-  setOverlayStatus('Choose the corrected action.', false);
-  openPie(ev.side === 'R' ? 'R' : 'L');
+  stopTimer();
+  const showCorrectionControls = () => setOverlayStatus('Choose corrected fencer and action.', false);
+  if (_resumeRecordingAfterVideoReview) {
+    restartNativeRecordingAfterReview().then(showCorrectionControls);
+  } else {
+    showCorrectionControls();
+  }
 };
 
 window.onAndroidVideoReviewNavigate = function(payloadJson) {
@@ -2793,6 +2987,18 @@ window.onAndroidVideoReviewNavigate = function(payloadJson) {
 
 window.onAndroidVideoReviewClose = function() {
   setOverlayStatus('', false);
+  if (_resumeRecordingAfterVideoReview) {
+    _reviewStartedFromRecording = false;
+    _activeVideoReviewSource = null;
+    restartNativeRecordingAfterReview({ resumeTimer: true });
+  } else if (_resumeImportedAfterVideoReview) {
+    _resumeImportedAfterVideoReview = false;
+    if (M && !M.finished) startTimer();
+  } else if (_reviewStartedFromRecording) {
+    _reviewStartedFromRecording = false;
+    _activeVideoReviewSource = null;
+    if (M && !M.finished) startTimer();
+  }
 };
 
 window.onAndroidVideoReviewError = function(payloadJson) {

@@ -104,10 +104,12 @@ public class AndroidVideoBridge {
                     }
                 };
                 NativeOverlayExporter.Result result;
-                if ("imported".equals(sourceType)) {
+                boolean hasSegments = payload.optJSONArray("segments") != null && payload.optJSONArray("segments").length() > 0;
+                if ("imported".equals(sourceType) || hasSegments) {
                     try {
                         result = new Media3OverlayExporter(activity, callback).export(payload);
                     } catch (Exception media3Error) {
+                        if (hasSegments) throw media3Error;
                         emitProgress(sourceType, 0.03, "Media3 export failed; using compatibility exporter");
                         result = new NativeOverlayExporter(activity, callback).export(payload);
                     }
@@ -117,6 +119,27 @@ public class AndroidVideoBridge {
                 emitComplete(sourceType, result);
             } catch (Exception e) {
                 emitError("native", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void saveRecordedSegment(String sourceUri, String displayName, long durationMs) {
+        executor.execute(() -> {
+            try {
+                Uri uri = Uri.parse(sourceUri);
+                File file = fileFromUri(uri);
+                if (file == null || !file.exists()) throw new IllegalArgumentException("Recording segment is not available");
+                Uri savedUri = saveToMediaStore(file, displayName == null ? file.getName() : displayName);
+                JSONObject payload = new JSONObject();
+                payload.put("sourceType", "recorded");
+                payload.put("uri", sourceUri);
+                if (savedUri != null) payload.put("savedUri", savedUri.toString());
+                payload.put("displayName", displayName == null ? file.getName() : displayName);
+                payload.put("durationMs", Math.max(0L, durationMs));
+                emit("window.onAndroidExportComplete", payload);
+            } catch (Exception e) {
+                emitError("recorded", e);
             }
         });
     }
@@ -234,7 +257,6 @@ public class AndroidVideoBridge {
             payload.put("savedUri", uri.toString());
             payload.put("displayName", displayName == null ? "ufl-recording.mp4" : displayName);
             payload.put("durationMs", durationMs);
-            payload.put("overlaid", true);
             emit("window.onAndroidRecordingStopped", payload);
         } catch (Exception e) {
             emitError("recorded", e);
@@ -341,6 +363,20 @@ public class AndroidVideoBridge {
         return s.isEmpty() ? fallback : s;
     }
 
+    private File fileFromUri(Uri uri) {
+        if (uri == null) return null;
+        if ("file".equals(uri.getScheme())) return new File(uri.getPath());
+        if ("content".equals(uri.getScheme()) && activity.getPackageName().concat(".fileprovider").equals(uri.getAuthority())) {
+            String path = uri.getPath();
+            if (path == null) return null;
+            int slash = path.indexOf('/', 1);
+            if (slash < 0 || slash + 1 >= path.length()) return null;
+            String relative = Uri.decode(path.substring(slash + 1));
+            return new File(activity.getCacheDir(), relative);
+        }
+        return null;
+    }
+
     private Uri saveToMediaStore(File file, String displayName) throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
 
@@ -348,7 +384,7 @@ public class AndroidVideoBridge {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Video.Media.DISPLAY_NAME, safeFilePart(displayName, "ufl-overlay.mp4"));
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-        values.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/UFL Fencing");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/UFL Fencing");
         values.put(MediaStore.Video.Media.IS_PENDING, 1);
 
         Uri uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
