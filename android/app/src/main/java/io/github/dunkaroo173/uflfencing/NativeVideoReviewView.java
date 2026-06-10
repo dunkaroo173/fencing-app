@@ -49,7 +49,6 @@ class NativeVideoReviewView extends FrameLayout {
     private final TextView actionLabelView;
     private final TextView actionResultView;
     private final TextView timeView;
-    private final TextView speedView;
     private final SeekBar scrubber;
     private final Button playButton;
     private final Button moreButton;
@@ -174,7 +173,7 @@ class NativeVideoReviewView extends FrameLayout {
         speed1Button = button(context, "1x");
         Button keep = button(context, "KEEP");
         Button edit = button(context, "EDIT");
-        moreButton = button(context, "MORE");
+        moreButton = button(context, "SEEK");
         primaryControls.addView(replay);
         primaryControls.addView(playButton);
         primaryControls.addView(speed025Button);
@@ -194,21 +193,15 @@ class NativeVideoReviewView extends FrameLayout {
         Button back1 = button(context, "-1s");
         Button fwd1 = button(context, "+1s");
         Button fwd2 = button(context, "+2s");
-        Button jumpAction = button(context, "ACTION");
-        speedView = label(context, 11, Color.rgb(245, 200, 66));
         Button previous = button(context, "PREV");
         Button next = button(context, "NEXT");
-        Button close = button(context, "CLOSE");
 
         advancedControls.addView(back2);
         advancedControls.addView(back1);
-        advancedControls.addView(jumpAction);
         advancedControls.addView(fwd1);
         advancedControls.addView(fwd2);
         advancedControls.addView(previous);
         advancedControls.addView(next);
-        advancedControls.addView(close);
-        advancedControls.addView(speedView);
         bottom.addView(advancedControls);
 
         LayoutParams bottomParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
@@ -238,7 +231,6 @@ class NativeVideoReviewView extends FrameLayout {
         playButton.setOnClickListener(v -> togglePlay());
         replay.setOnClickListener(v -> replay());
         moreButton.setOnClickListener(v -> toggleMoreControls());
-        jumpAction.setOnClickListener(v -> jumpToAction());
         back2.setOnClickListener(v -> shift(-2));
         back1.setOnClickListener(v -> shift(-1));
         fwd1.setOnClickListener(v -> shift(1));
@@ -257,10 +249,6 @@ class NativeVideoReviewView extends FrameLayout {
         });
         edit.setOnClickListener(v -> {
             if (callback != null) callback.onEdit(eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
-        });
-        close.setOnClickListener(v -> {
-            hide();
-            if (callback != null) callback.onClose();
         });
     }
 
@@ -298,7 +286,7 @@ class NativeVideoReviewView extends FrameLayout {
             player.seekTo(secondsToMs(clipStartSec));
             setVisibility(VISIBLE);
             advancedControls.setVisibility(GONE);
-            moreButton.setText("MORE");
+            moreButton.setText("SEEK");
             updateSpeedButtons();
             handler.removeCallbacks(ticker);
             handler.post(ticker);
@@ -344,13 +332,7 @@ class NativeVideoReviewView extends FrameLayout {
     private void toggleMoreControls() {
         boolean show = advancedControls.getVisibility() != VISIBLE;
         advancedControls.setVisibility(show ? VISIBLE : GONE);
-        moreButton.setText(show ? "LESS" : "MORE");
-    }
-
-    private void jumpToAction() {
-        if (player == null) return;
-        player.seekTo(secondsToMs(clamp(eventTimeSec, clipStartSec, clipEndSec)));
-        syncUi();
+        moreButton.setText(show ? "HIDE" : "SEEK");
     }
 
     private void shift(double deltaSec) {
@@ -387,7 +369,6 @@ class NativeVideoReviewView extends FrameLayout {
     }
 
     private void updateSpeedButtons() {
-        speedView.setText(String.format(Locale.US, " %.2fx", playbackRate));
         speed025Button.setTextColor(playbackRate == 0.25 ? Color.rgb(245, 200, 66) : Color.WHITE);
         speed05Button.setTextColor(playbackRate == 0.5 ? Color.rgb(245, 200, 66) : Color.WHITE);
         speed1Button.setTextColor(playbackRate == 1.0 ? Color.rgb(245, 200, 66) : Color.WHITE);
