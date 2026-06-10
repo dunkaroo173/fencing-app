@@ -156,27 +156,33 @@ class NativeVideoReviewView extends FrameLayout {
 
         LinearLayout bottom = new LinearLayout(context);
         bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setPadding(dp(12), dp(5), dp(12), dp(7));
-        bottom.setBackgroundColor(Color.argb(190, 0, 0, 0));
+        bottom.setPadding(dp(8), dp(3), dp(8), dp(5));
+        bottom.setBackgroundColor(Color.argb(115, 0, 0, 0));
 
         scrubber = new SeekBar(context);
         scrubber.setMax(1000);
-        bottom.addView(scrubber, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(34)));
+        bottom.addView(scrubber, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(26)));
 
         LinearLayout primaryControls = new LinearLayout(context);
         primaryControls.setGravity(Gravity.CENTER);
         primaryControls.setOrientation(LinearLayout.HORIZONTAL);
 
         Button replay = button(context, "REPLAY");
+        playButton = button(context, "PLAY");
+        speed025Button = button(context, "0.25x");
+        speed05Button = button(context, "0.5x");
+        speed1Button = button(context, "1x");
         Button keep = button(context, "KEEP");
         Button edit = button(context, "EDIT");
         moreButton = button(context, "MORE");
-        Button close = button(context, "CLOSE");
         primaryControls.addView(replay);
+        primaryControls.addView(playButton);
+        primaryControls.addView(speed025Button);
+        primaryControls.addView(speed05Button);
+        primaryControls.addView(speed1Button);
         primaryControls.addView(keep);
         primaryControls.addView(edit);
         primaryControls.addView(moreButton);
-        primaryControls.addView(close);
         bottom.addView(primaryControls);
 
         advancedControls = new LinearLayout(context);
@@ -188,26 +194,20 @@ class NativeVideoReviewView extends FrameLayout {
         Button back1 = button(context, "-1s");
         Button fwd1 = button(context, "+1s");
         Button fwd2 = button(context, "+2s");
-        playButton = button(context, "PLAY");
         Button jumpAction = button(context, "ACTION");
-        speed025Button = button(context, "0.25x");
-        speed05Button = button(context, "0.5x");
-        speed1Button = button(context, "1x");
-        speedView = label(context, 12, Color.rgb(245, 200, 66));
+        speedView = label(context, 11, Color.rgb(245, 200, 66));
         Button previous = button(context, "PREV");
         Button next = button(context, "NEXT");
+        Button close = button(context, "CLOSE");
 
         advancedControls.addView(back2);
         advancedControls.addView(back1);
-        advancedControls.addView(playButton);
         advancedControls.addView(jumpAction);
         advancedControls.addView(fwd1);
         advancedControls.addView(fwd2);
-        advancedControls.addView(speed025Button);
-        advancedControls.addView(speed05Button);
-        advancedControls.addView(speed1Button);
         advancedControls.addView(previous);
         advancedControls.addView(next);
+        advancedControls.addView(close);
         advancedControls.addView(speedView);
         bottom.addView(advancedControls);
 
@@ -510,10 +510,11 @@ class NativeVideoReviewView extends FrameLayout {
         Button button = new Button(context);
         button.setText(text);
         button.setTextColor(Color.WHITE);
-        button.setTextSize(12);
+        button.setTextSize(11);
         button.setAllCaps(false);
-        button.setPadding(dp(8), dp(4), dp(8), dp(4));
-        button.setMinWidth(dp(64));
+        button.setPadding(dp(5), dp(2), dp(5), dp(2));
+        button.setMinWidth(dp(52));
+        button.setMinHeight(dp(34));
         return button;
     }
 
