@@ -566,4 +566,33 @@ test.describe('native video review', () => {
     expect(result.corrected.isHit).toBe(false);
     expect(result.corrected.videoReview.chosenTime).toBe(8.1);
   });
+
+  test('video review action launches review instead of recording an event', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 30000 };
+      M.events = [
+        { ts: 9, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      const before = M.events.length;
+      (window as any).showConfirm('L', 3);
+      return {
+        before,
+        after: M.events.length,
+        payload: (window as any).__reviewPayload,
+        confirmVisible: document.getElementById('conf-l')?.classList.contains('on'),
+      };
+    });
+
+    expect(result.after).toBe(result.before);
+    expect(result.confirmVisible).toBe(false);
+    expect(result.payload.eventIndex).toBe(0);
+    expect(result.payload.sourceUri).toBe('content://review/source.mp4');
+  });
 });

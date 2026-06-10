@@ -1138,6 +1138,12 @@ let _pendingAction = null;
 const NO_HIT_CHOICE = new Set([1, 2, 3, 124, 224, 190, 191, 290, 291]);
 
 function showConfirm(side, actionId) {
+  if (actionId === 3) {
+    _pendingAction = null;
+    const launched = startVideoReviewForIndex();
+    if (!launched && M && !M.finished) startTimer();
+    return;
+  }
   _pendingAction = {side, actionId};
   const action   = ACTIONS[actionId];
   const s        = side === 'L' ? 'l' : 'r';
@@ -2562,16 +2568,16 @@ function latestReviewableEventIndex() {
 function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
   if (!M || !M.events || index < 0 || index >= M.events.length) {
     setOverlayStatus('No action available for video review.', false);
-    return;
+    return false;
   }
   if (!isAndroidVideoReviewAvailable()) {
     setOverlayStatus('Native video review is available only in the Android app.', false);
-    return;
+    return false;
   }
   const source = videoReviewSource();
   if (!source || !source.uri) {
     setOverlayStatus('No source video available for review. Import a video or record a bout first.', false);
-    return;
+    return false;
   }
   const ev = M.events[index];
   const eventBoutTime = overlayEventTime(ev);
@@ -2594,8 +2600,10 @@ function startVideoReviewForIndex(index = latestReviewableEventIndex()) {
       match,
       title: eventReviewTitle(ev, index),
     }));
+    return true;
   } catch (err) {
     setOverlayStatus(err && err.message ? err.message : 'Could not start video review.', false);
+    return false;
   }
 }
 
