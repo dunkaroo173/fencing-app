@@ -791,7 +791,15 @@ test.describe('native video review', () => {
 
   test('video review action segments active native recording and edit resumes recording', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
+    // clickStart auto-starts the browser camera; deny it deterministically and
+    // let the chain settle, or its late rejection resets the faked _camState
+    // mid-test via resetCamUI().
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    });
     await startMatch(page);
+    await page.waitForFunction(() => _camState === 'idle');
 
     const result = await page.evaluate(async () => {
       const reviewPayloads: any[] = [];
