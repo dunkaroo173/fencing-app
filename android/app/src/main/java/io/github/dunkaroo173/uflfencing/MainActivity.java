@@ -72,6 +72,11 @@ public class MainActivity extends AppCompatActivity {
                         "window.onAndroidImportedPreviewError&&window.onAndroidImportedPreviewError(" + JSONObject.quote(message) + ")",
                         null));
             }
+
+            @Override
+            public void onProgress(long positionMs, long durationMs, boolean playing) {
+                if (videoBridge != null) videoBridge.onImportedPreviewProgress(positionMs, durationMs, playing);
+            }
         });
         root.addView(nativeImportPreview, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -229,6 +234,10 @@ public class MainActivity extends AppCompatActivity {
 
     void seekNativePreview(double seconds) {
         runOnUiThread(() -> nativeImportPreview.seekToMs(Math.max(0, (int) Math.round(seconds * 1000.0))));
+    }
+
+    void setNativePreviewSpeed(double speed) {
+        runOnUiThread(() -> nativeImportPreview.setSpeed(speed));
     }
 
     void clearNativePreview() {

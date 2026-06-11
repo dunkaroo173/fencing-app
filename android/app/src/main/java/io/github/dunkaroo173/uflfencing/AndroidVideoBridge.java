@@ -202,6 +202,21 @@ public class AndroidVideoBridge {
     }
 
     @JavascriptInterface
+    public void setImportedPreviewSpeed(double speed) {
+        activity.setNativePreviewSpeed(speed);
+    }
+
+    void onImportedPreviewProgress(long positionMs, long durationMs, boolean playing) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("positionMs", positionMs);
+            payload.put("durationMs", durationMs);
+            payload.put("playing", playing);
+            emit("window.onAndroidImportedPreviewProgress", payload);
+        } catch (Exception ignored) {}
+    }
+
+    @JavascriptInterface
     public void clearImportedPreview() {
         activity.clearNativePreview();
     }

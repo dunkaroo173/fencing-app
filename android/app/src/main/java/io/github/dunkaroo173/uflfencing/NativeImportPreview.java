@@ -5,6 +5,9 @@ import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Surface;
@@ -15,9 +18,11 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
     interface Callback {
         void onEnded();
         void onError(String message);
+        void onProgress(long positionMs, long durationMs, boolean playing);
     }
 
     private static final String TAG = "UFLImportPreview";
+    private static final long PROGRESS_INTERVAL_MS = 250L;
 
     private MediaPlayer player;
     private Surface surface;
@@ -26,6 +31,20 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
     private int videoWidth;
     private int videoHeight;
     private Callback callback;
+    private double playbackSpeed = 1.0;
+    private final Handler progressHandler = new Handler(Looper.getMainLooper());
+    private final Runnable progressTicker = new Runnable() {
+        @Override
+        public void run() {
+            MediaPlayer active = player;
+            if (active != null && callback != null) {
+                try {
+                    callback.onProgress(active.getCurrentPosition(), active.getDuration(), active.isPlaying());
+                } catch (Exception ignored) {}
+            }
+            if (active != null) progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS);
+        }
+    };
 
     NativeImportPreview(Context context) {
         super(context);
@@ -54,6 +73,7 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
         playWhenReady = true;
         if (player != null) {
             player.start();
+            applySpeed();
         } else if (pendingUri != null && isAvailable()) {
             preparePlayer();
         }
@@ -67,8 +87,28 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
     }
 
     void seekToMs(int millis) {
-        if (player != null) {
-            player.seekTo(Math.max(0, millis));
+        if (player == null) return;
+        long target = Math.max(0, millis);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            player.seekTo(target, MediaPlayer.SEEK_CLOSEST);
+        } else {
+            player.seekTo((int) target);
+        }
+    }
+
+    void setSpeed(double speed) {
+        playbackSpeed = speed <= 0 ? 1.0 : speed;
+        // Setting PlaybackParams on a paused MediaPlayer starts playback;
+        // only apply while playing and re-apply on the next play().
+        if (player != null && player.isPlaying()) applySpeed();
+    }
+
+    private void applySpeed() {
+        if (player == null) return;
+        try {
+            player.setPlaybackParams(player.getPlaybackParams().setSpeed((float) playbackSpeed));
+        } catch (Exception e) {
+            Log.w(TAG, "setSpeed failed", e);
         }
     }
 
@@ -106,7 +146,12 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
                 videoHeight = mp.getVideoHeight();
                 updateTransform();
                 seekToMs(0);
-                if (playWhenReady) mp.start();
+                if (playWhenReady) {
+                    mp.start();
+                    applySpeed();
+                }
+                progressHandler.removeCallbacks(progressTicker);
+                progressHandler.post(progressTicker);
             });
             player.setOnVideoSizeChangedListener((mp, width, height) -> {
                 videoWidth = width;
@@ -131,6 +176,7 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
     }
 
     private void releasePlayer() {
+        progressHandler.removeCallbacks(progressTicker);
         if (player != null) {
             try {
                 player.reset();
