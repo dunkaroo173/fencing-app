@@ -3322,6 +3322,16 @@ window.onAndroidVideoPickCanceled = function() {
   setImportVideoStatus('');
 };
 
+// Pushed by the activity on resume: if the native recording died while the
+// WebView could not process callbacks, drop the transparent-preview chrome
+// instead of showing black over a missing camera preview.
+window.onAndroidRecordingStateSync = function(nativeRecording) {
+  if (!nativeRecording && _camState === 'recording' && _nativeRecordingActive) {
+    resetCamUI();
+    showCamError('Recording stopped while the app was in the background');
+  }
+};
+
 window.onAndroidVideoReviewKeep = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   if (!markReviewDecision(payload, 'confirmed')) return;
@@ -3341,6 +3351,10 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
     if (M && !M.finished) startTimer();
+  } else if (M && !M.finished) {
+    // Review opened from already-stored footage (recording, if any, was never
+    // interrupted): still resume the bout clock on exit.
+    startTimer();
   }
 };
 
@@ -3403,6 +3417,8 @@ window.onAndroidVideoReviewClose = function() {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
     if (M && !M.finished) startTimer();
+  } else if (M && !M.finished) {
+    startTimer();
   }
 };
 

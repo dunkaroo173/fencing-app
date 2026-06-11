@@ -116,6 +116,10 @@ class NativeCameraRecorder {
         }
     }
 
+    boolean isRecording() {
+        return recording != null;
+    }
+
     void clearPreview() {
         if (recording != null) return;
         activity.runOnUiThread(() -> previewView.setVisibility(View.GONE));

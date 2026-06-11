@@ -1328,6 +1328,45 @@ test.describe('native video review', () => {
     expect(result.payloads[0].eventVideoTime).toBeCloseTo(15, 1); // bout 30 - segment start 15
   });
 
+  test('exiting a review of stored footage resumes the bout clock', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      // Footage already stored; no recording active, no import - the review
+      // opens without setting any resume flag.
+      M.recordingSegments = [
+        { uri: 'content://recorded/first.mp4', savedUri: 'content://recorded/first.mp4', durationMs: 20000, startBoutTs: 0, pauses: [], sourceType: 'recorded' },
+      ];
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).startVideoReviewForIndex(0);
+      const stoppedDuringReview = !M.running;
+      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
+        eventId: M.events[0].id,
+        eventIndex: 0,
+        chosenTime: 8,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      const runningAfterKeep = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
+      return { stoppedDuringReview, runningAfterKeep };
+    });
+
+    expect(result.stoppedDuringReview).toBe(true); // clock parked while reviewing
+    expect(result.runningAfterKeep).toBe(true);    // and resumes on CALL STANDS
+  });
+
   test('a review decision returns to the match even with other pending reviews', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);

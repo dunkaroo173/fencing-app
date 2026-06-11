@@ -401,6 +401,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // The camera can die while the WebView is paused (doze, backgrounding)
+        // and its error callback is never processed - the web layer then keeps
+        // the transparent-preview chrome over nothing (a pure black screen).
+        // Push the actual recording state so it can resync.
+        if (webView != null && nativeCameraRecorder != null && !nativeReviewOnly) {
+            boolean recordingActive = nativeCameraRecorder.isRecording();
+            webView.evaluateJavascript(
+                    "window.onAndroidRecordingStateSync&&window.onAndroidRecordingStateSync(" + recordingActive + ")",
+                    null);
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         if (nativeVideoReviewView != null) nativeVideoReviewView.release();
         if (nativeImportPreview != null) nativeImportPreview.release();
