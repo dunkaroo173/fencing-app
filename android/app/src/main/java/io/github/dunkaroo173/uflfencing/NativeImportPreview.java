@@ -1,8 +1,6 @@
 package io.github.dunkaroo173.uflfencing;
 
 import android.content.Context;
-import android.graphics.Matrix;
-import android.graphics.SurfaceTexture;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -10,11 +8,17 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.Surface;
-import android.view.TextureView;
+import android.view.Gravity;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import java.util.Locale;
 
-class NativeImportPreview extends TextureView implements TextureView.SurfaceTextureListener {
+// SurfaceView, not TextureView: the WebView's transparent areas only reveal
+// content rendered BELOW the window (same mechanism as the camera's
+// PreviewView). A TextureView sibling under the WebView is not composited.
+class NativeImportPreview extends SurfaceView implements SurfaceHolder.Callback {
     interface Callback {
         void onEnded();
         void onError(String message);
@@ -25,11 +29,9 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
     private static final long PROGRESS_INTERVAL_MS = 250L;
 
     private MediaPlayer player;
-    private Surface surface;
+    private boolean surfaceReady;
     private Uri pendingUri;
     private boolean playWhenReady;
-    private int videoWidth;
-    private int videoHeight;
     private Callback callback;
     private double playbackSpeed = 1.0;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
@@ -64,7 +66,7 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
         pendingUri = uri;
         playWhenReady = false;
         releasePlayer();
-        if (isAvailable()) {
+        if (surfaceReady) {
             preparePlayer();
         }
     }
@@ -74,7 +76,7 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
         if (player != null) {
             player.start();
             applySpeed();
-        } else if (pendingUri != null && isAvailable()) {
+        } else if (pendingUri != null && surfaceReady) {
             preparePlayer();
         }
     }
@@ -121,30 +123,22 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
 
     void release() {
         clear();
-        if (surface != null) {
-            surface.release();
-            surface = null;
-        }
     }
 
     private void init() {
-        setSurfaceTextureListener(this);
+        getHolder().addCallback(this);
+        setZOrderOnTop(false);
     }
 
     private void preparePlayer() {
-        if (pendingUri == null || !isAvailable()) return;
+        if (pendingUri == null || !surfaceReady) return;
         try {
-            if (surface == null) {
-                surface = new Surface(getSurfaceTexture());
-            }
             player = new MediaPlayer();
-            player.setSurface(surface);
+            player.setDisplay(getHolder());
             player.setDataSource(getContext(), pendingUri);
             player.setVolume(0f, 0f);
             player.setOnPreparedListener(mp -> {
-                videoWidth = mp.getVideoWidth();
-                videoHeight = mp.getVideoHeight();
-                updateTransform();
+                fitToVideo(mp.getVideoWidth(), mp.getVideoHeight());
                 seekToMs(0);
                 if (playWhenReady) {
                     mp.start();
@@ -153,11 +147,7 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
                 progressHandler.removeCallbacks(progressTicker);
                 progressHandler.post(progressTicker);
             });
-            player.setOnVideoSizeChangedListener((mp, width, height) -> {
-                videoWidth = width;
-                videoHeight = height;
-                updateTransform();
-            });
+            player.setOnVideoSizeChangedListener((mp, width, height) -> fitToVideo(width, height));
             player.setOnCompletionListener(mp -> {
                 playWhenReady = false;
                 if (callback != null) callback.onEnded();
@@ -184,46 +174,44 @@ class NativeImportPreview extends TextureView implements TextureView.SurfaceText
             } catch (Exception ignored) {}
             player = null;
         }
-        videoWidth = 0;
-        videoHeight = 0;
-        setTransform(null);
     }
 
-    private void updateTransform() {
-        int viewWidth = getWidth();
-        int viewHeight = getHeight();
-        if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return;
-
-        float scale = Math.max(viewWidth / (float) videoWidth, viewHeight / (float) videoHeight);
-        float scaledWidth = videoWidth * scale;
-        float scaledHeight = videoHeight * scale;
-
-        Matrix matrix = new Matrix();
-        matrix.setScale(scaledWidth / viewWidth, scaledHeight / viewHeight, viewWidth / 2f, viewHeight / 2f);
-        setTransform(matrix);
-    }
-
-    @Override
-    public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
-        surface = new Surface(surfaceTexture);
-        preparePlayer();
+    // SurfaceView cannot transform its content: letterbox by sizing the view
+    // to the video's aspect ratio, centered in the parent.
+    private void fitToVideo(int videoWidth, int videoHeight) {
+        ViewGroup parent = (ViewGroup) getParent();
+        if (parent == null || videoWidth <= 0 || videoHeight <= 0) return;
+        int parentWidth = parent.getWidth();
+        int parentHeight = parent.getHeight();
+        if (parentWidth <= 0 || parentHeight <= 0) return;
+        float scale = Math.min(parentWidth / (float) videoWidth, parentHeight / (float) videoHeight);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                Math.round(videoWidth * scale),
+                Math.round(videoHeight * scale),
+                Gravity.CENTER);
+        setLayoutParams(params);
     }
 
     @Override
-    public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
-        updateTransform();
-    }
-
-    @Override
-    public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-        releasePlayer();
-        if (surface != null) {
-            surface.release();
-            surface = null;
+    public void surfaceCreated(SurfaceHolder holder) {
+        surfaceReady = true;
+        if (player != null) {
+            player.setDisplay(holder);
+        } else {
+            preparePlayer();
         }
-        return true;
     }
 
     @Override
-    public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {}
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        surfaceReady = false;
+        if (player != null) {
+            try {
+                player.setDisplay(null);
+            } catch (Exception ignored) {}
+        }
+    }
 }
