@@ -78,7 +78,11 @@ public class MainActivity extends AppCompatActivity {
                 if (videoBridge != null) videoBridge.onImportedPreviewProgress(positionMs, durationMs, playing);
             }
         });
-        root.addView(nativeImportPreview, new FrameLayout.LayoutParams(
+        // Insert BELOW the WebView: NativeImportPreview is a TextureView and
+        // renders at its view z-order, unlike the camera's SurfaceView. The
+        // match UI shows over it through the transparent android-native-preview
+        // chrome - on top it would cover the action panels and HUD entirely.
+        root.addView(nativeImportPreview, 0, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
