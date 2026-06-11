@@ -1261,172 +1261,148 @@ test.describe('native video review', () => {
   });
 });
 
-test.describe('import annotation workbench', () => {
-  const installWorkbenchMocks = async (page: Page) => {
+test.describe('imported-video playback controls', () => {
+  const installImportMocks = async (page: Page) => {
     await page.evaluate(() => {
-      (window as any).__reviewPayloads = [];
+      (window as any).__calls = { play: 0, pause: 0, seeks: [] as number[], speeds: [] as number[] };
       (window as any).AndroidVideo = {
         exportOverlay() {},
         closeVideoReview() {},
         clearImportedPreview() {},
-        seekImportedPreview() {},
-        pauseImportedPreview() {},
-        playImportedPreview() {},
-        startVideoReview(json: string) { (window as any).__reviewPayloads.push(JSON.parse(json)); },
+        startVideoReview() {},
+        playImportedPreview() { (window as any).__calls.play++; },
+        pauseImportedPreview() { (window as any).__calls.pause++; },
+        seekImportedPreview(sec: number) { (window as any).__calls.seeks.push(sec); },
+        setImportedPreviewSpeed(rate: number) { (window as any).__calls.speeds.push(rate); },
       };
       _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
       _importVideoFile = { name: 'source.mp4', nativeUri: 'content://review/source.mp4' } as any;
     });
   };
 
-  test('starting a match with an imported video opens the annotate workbench', async ({ page }) => {
+  test('starting a match with an imported video shows the control strip and auto-plays', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
+    await installImportMocks(page);
     await startMatch(page);
 
     const result = await page.evaluate(() => ({
-      payloads: (window as any).__reviewPayloads,
+      stripVisible: document.getElementById('import-strip')?.classList.contains('on'),
       running: M.running,
-      annotateActive: _annotateActive,
+      playCalls: (window as any).__calls.play,
+      countdownActive: document.getElementById('s-countdown')?.classList.contains('active'),
+      speeds: (window as any).__calls.speeds,
     }));
 
-    expect(result.payloads).toHaveLength(1);
-    expect(result.payloads[0].mode).toBe('annotate');
-    expect(result.payloads[0].clipStart).toBe(0);
-    expect(result.payloads[0].clipEnd).toBe(120);
-    expect(result.payloads[0].resumeAt).toBe(0);
-    expect(result.payloads[0].playbackRate).toBe(1.0);
-    expect(result.running).toBe(false);
-    expect(result.annotateActive).toBe(true);
+    expect(result.stripVisible).toBe(true);
+    expect(result.running).toBe(true);
+    expect(result.playCalls).toBeGreaterThan(0);
+    expect(result.countdownActive).toBe(false);
+    expect(result.speeds).toContain(1);
   });
 
-  test('marking a moment stamps the event at the video position and reopens the workbench', async ({ page }) => {
+  test('playback progress drives the bout clock and event stamping', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
-    await startMatch(page);
-
-    const result = await page.evaluate(async () => {
-      (window as any).__reviewPayloads.length = 0;
-      (window as any).onAndroidVideoReviewMark(JSON.stringify({ chosenTime: 42.5, playbackRate: 1 }));
-      const markPending = _annotateMarkBoutTime;
-      (window as any).doConfirm('L', 100, true);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return {
-        markPending,
-        event: M.events[0],
-        scoreL: M.scoreL,
-        payloads: (window as any).__reviewPayloads,
-        running: M.running,
-      };
-    });
-
-    expect(result.markPending).toBe(42.5);
-    expect(result.event.ts).toBe(42.5);
-    expect(result.event.period).toBe(1);
-    expect(result.event.videoReview.markedTime).toBe(42.5);
-    expect(result.scoreL).toBe(1);
-    expect(result.running).toBe(false);
-    expect(result.payloads).toHaveLength(1);
-    expect(result.payloads[0].mode).toBe('annotate');
-    expect(result.payloads[0].resumeAt).toBe(42.5);
-  });
-
-  test('canceling a mark returns to the workbench without recording an event', async ({ page }) => {
-    await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
-    await startMatch(page);
-
-    const result = await page.evaluate(async () => {
-      (window as any).__reviewPayloads.length = 0;
-      (window as any).onAndroidVideoReviewMark(JSON.stringify({ chosenTime: 17.2, playbackRate: 1 }));
-      (window as any).showConfirm('L', 100);
-      document.getElementById('conf-l-no')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
-      await new Promise(resolve => setTimeout(resolve, 250));
-      return {
-        events: M.events.length,
-        markPending: _annotateMarkBoutTime,
-        payloads: (window as any).__reviewPayloads,
-      };
-    });
-
-    expect(result.events).toBe(0);
-    expect(result.markPending).toBeNull();
-    expect(result.payloads).toHaveLength(1);
-    expect(result.payloads[0].mode).toBe('annotate');
-    expect(result.payloads[0].resumeAt).toBe(17.2);
-  });
-
-  test('workbench navigation opens the nearest marked action and keep returns to the workbench', async ({ page }) => {
-    await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
-    await startMatch(page);
-
-    const result = await page.evaluate(async () => {
-      M.events = [
-        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
-        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
-      ];
-      (window as any).__reviewPayloads.length = 0;
-      (window as any).onAndroidVideoReviewNavigate(JSON.stringify({ eventIndex: -1, direction: 1, chosenTime: 12 }));
-      const reviewPayload = (window as any).__reviewPayloads[0];
-      (window as any).onAndroidVideoReviewKeep(JSON.stringify({
-        eventId: reviewPayload ? reviewPayload.eventId : null,
-        eventIndex: reviewPayload ? reviewPayload.eventIndex : -1,
-        chosenTime: 30,
-        clipStart: 25,
-        clipEnd: 32,
-        playbackRate: 0.5,
-      }));
-      await new Promise(resolve => setTimeout(resolve, 250));
-      return {
-        payloads: (window as any).__reviewPayloads,
-        reviewedStatus: M.events[1].reviewStatus,
-      };
-    });
-
-    expect(result.payloads).toHaveLength(2);
-    expect(result.payloads[0].mode).not.toBe('annotate');
-    expect(result.payloads[0].eventIndex).toBe(1); // ts 30 is the nearest after 12s
-    expect(result.payloads[1].mode).toBe('annotate');
-    expect(result.payloads[1].resumeAt).toBe(30);
-    expect(result.reviewedStatus).toBe('confirmed');
-  });
-
-  test('closing the workbench parks annotation and resume reopens it', async ({ page }) => {
-    await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
-    await startMatch(page);
-
-    const result = await page.evaluate(async () => {
-      (window as any).__reviewPayloads.length = 0;
-      (window as any).onAndroidVideoReviewClose();
-      const parked = {
-        annotateActive: _annotateActive,
-        resumeVisible: document.getElementById('resume-btn')?.style.display,
-      };
-      document.getElementById('resume-btn')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
-      await new Promise(resolve => setTimeout(resolve, 100));
-      return {
-        parked,
-        payloads: (window as any).__reviewPayloads,
-        annotateActive: _annotateActive,
-      };
-    });
-
-    expect(result.parked.annotateActive).toBe(false);
-    expect(result.parked.resumeVisible).toBe('block');
-    expect(result.payloads).toHaveLength(1);
-    expect(result.payloads[0].mode).toBe('annotate');
-    expect(result.annotateActive).toBe(true);
-  });
-
-  test('review navigation and events list follow bout time for out-of-order marks', async ({ page }) => {
-    await page.goto(ANDROID_APP_PATH);
-    await installWorkbenchMocks(page);
+    await installImportMocks(page);
     await startMatch(page);
 
     const result = await page.evaluate(() => {
-      // Marks recorded out of order: 30s, then back at 8s, then 50s.
+      (window as any).onAndroidImportedPreviewProgress(JSON.stringify({
+        positionMs: 42500,
+        durationMs: 120000,
+        playing: true,
+      }));
+      const timerAfterProgress = M.timerSec;
+      (window as any).doConfirm('L', 100, true);
+      return {
+        timerAfterProgress,
+        event: M.events[0],
+        timeLabel: document.getElementById('is-time')?.textContent,
+      };
+    });
+
+    expect(result.timerAfterProgress).toBeCloseTo(180 - 42.5, 3);
+    expect(result.event.ts).toBeCloseTo(42.5, 3);
+    expect(result.event.period).toBe(1);
+    expect(result.timeLabel).toBe('0:42 / 2:00');
+  });
+
+  test('opening the radial pauses playback and confirming resumes it', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installImportMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const before = { ...(window as any).__calls };
+      (window as any).openPie('L');
+      const pausedAfterPie = !M.running;
+      const pauseCalls = (window as any).__calls.pause - before.pause;
+      (window as any).closePie('L', false);
+      (window as any).doConfirm('L', 100, true);
+      return {
+        pausedAfterPie,
+        pauseCalls,
+        runningAfterConfirm: M.running,
+        playAfterConfirm: (window as any).__calls.play - before.play,
+      };
+    });
+
+    expect(result.pausedAfterPie).toBe(true);
+    expect(result.pauseCalls).toBeGreaterThan(0);
+    expect(result.runningAfterConfirm).toBe(true);
+    expect(result.playAfterConfirm).toBeGreaterThan(0);
+  });
+
+  test('speed buttons set the playback rate on the backend', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installImportMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      document.getElementById('is-speed-05')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      const halfActive = document.getElementById('is-speed-05')?.classList.contains('on');
+      document.getElementById('is-speed-025')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      return {
+        halfActive,
+        speeds: (window as any).__calls.speeds,
+        quarterActive: document.getElementById('is-speed-025')?.classList.contains('on'),
+      };
+    });
+
+    expect(result.halfActive).toBe(true);
+    expect(result.quarterActive).toBe(true);
+    expect(result.speeds).toContain(0.5);
+    expect(result.speeds).toContain(0.25);
+  });
+
+  test('seeking moves the clock without recording events', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installImportMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).onAndroidImportedPreviewProgress(JSON.stringify({
+        positionMs: 10000, durationMs: 120000, playing: true,
+      }));
+      (window as any).importSeek(65);
+      return {
+        seeks: (window as any).__calls.seeks,
+        timerSec: M.timerSec,
+        events: M.events.length,
+      };
+    });
+
+    expect(result.seeks).toContain(65);
+    expect(result.timerSec).toBeCloseTo(180 - 65, 3);
+    expect(result.events).toBe(0);
+  });
+
+  test('review navigation and events list follow bout time for out-of-order events', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await installImportMocks(page);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      // Events annotated out of order: 30s, then back at 8s, then 50s.
       M.events = [
         { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
         { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
@@ -1436,9 +1412,9 @@ test.describe('import annotation workbench', () => {
       const listTimes = Array.from(document.querySelectorAll('#ev-list .ev-ts')).map(el => el.textContent);
       return {
         listTimes,
-        nextAfter8: (window as any).adjacentReviewIndex(1, 1),   // 8s -> 30s (index 0)
-        prevBefore30: (window as any).adjacentReviewIndex(0, -1), // 30s -> 8s (index 1)
-        nextAfter50: (window as any).adjacentReviewIndex(2, 1),   // nothing later
+        nextAfter8: (window as any).adjacentReviewIndex(1, 1),
+        prevBefore30: (window as any).adjacentReviewIndex(0, -1),
+        nextAfter50: (window as any).adjacentReviewIndex(2, 1),
       };
     });
 
@@ -1448,3 +1424,4 @@ test.describe('import annotation workbench', () => {
     expect(result.nextAfter50).toBe(-1);
   });
 });
+
