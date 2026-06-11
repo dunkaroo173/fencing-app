@@ -1261,6 +1261,66 @@ test.describe('native video review', () => {
     expect(result.eventIndex).toBe(1);
   });
 
+  test('reviewing an action from the active recording stops it instead of replaying the previous segment', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    // Camera denial, as in the other recording-state tests.
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    });
+    await startMatch(page);
+    await page.waitForFunction(() => _camState === 'idle');
+
+    const result = await page.evaluate(async () => {
+      const payloads: any[] = [];
+      let stopped = false;
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        clearNativeRecordingPreview() {},
+        prepareNativeRecording() { setTimeout(() => (window as any).onAndroidRecordingReady(), 0); },
+        startNativeRecording() { setTimeout(() => (window as any).onAndroidRecordingStarted(), 0); },
+        stopNativeRecording() {
+          stopped = true;
+          setTimeout(() => {
+            (window as any).onAndroidRecordingStopped(JSON.stringify({
+              sourceType: 'recorded',
+              uri: 'content://recorded/second.mp4',
+              savedUri: 'content://recorded/second.mp4',
+              displayName: 'second.mp4',
+              durationMs: 25000,
+            }));
+          }, 0);
+        },
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      // Segment 1 covers bout 0-15s; the camera is rolling again (segment 2,
+      // started at bout 15s, not yet finalized).
+      M.recordingSegments = [
+        { uri: 'content://recorded/first.mp4', savedUri: 'content://recorded/first.mp4', durationMs: 15000, startBoutTs: 0, pauses: [], sourceType: 'recorded' },
+      ];
+      M.recordingStartBoutTs = 15;
+      _recBoutStart = 15;
+      _camState = 'recording';
+      _nativeRecordingActive = true;
+      M.events = [
+        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).startVideoReviewForIndex(0);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return {
+        stopped,
+        payloads,
+      };
+    });
+
+    // The action at bout 30s is NOT in segment 1: the recording must be
+    // stopped and the review opened on the fresh segment.
+    expect(result.stopped).toBe(true);
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].sourceUri).toBe('content://recorded/second.mp4');
+    expect(result.payloads[0].eventVideoTime).toBeCloseTo(15, 1); // bout 30 - segment start 15
+  });
+
   test('a review decision returns to the match even with other pending reviews', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);

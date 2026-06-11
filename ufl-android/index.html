@@ -2980,17 +2980,32 @@ function isAndroidVideoReviewAvailable() {
   return !!(window.AndroidVideo && typeof AndroidVideo.startVideoReview === 'function');
 }
 
+// Strict: only a segment whose footage actually covers the bout time
+// (pause-aware - the video runs through clock pauses, so the covered bout
+// span is shorter than the video duration).
 function recordedSegmentForBoutTime(boutTime) {
+  if (!M || !Array.isArray(M.recordingSegments) || !M.recordingSegments.length) return null;
+  const target = Number(boutTime) || 0;
+  for (const segment of M.recordingSegments) {
+    if (!segment || !(segment.uri || segment.savedUri)) continue;
+    const start = Number(segment.startBoutTs) || 0;
+    const durationSec = Math.max(0, Number(segment.durationMs || 0) / 1000);
+    if (durationSec <= 0) continue;
+    const endBoutTime = videoTimeToBoutTime(durationSec, start, true, segment.pauses);
+    if (target >= start - 0.05 && target <= endBoutTime + 0.5) return segment;
+  }
+  return null;
+}
+
+// Closest stored segment, for when no footage covers the time and none better
+// can exist (the camera is not rolling).
+function nearestRecordedSegment(boutTime) {
   if (!M || !Array.isArray(M.recordingSegments) || !M.recordingSegments.length) return null;
   const target = Number(boutTime) || 0;
   let fallback = null;
   for (const segment of M.recordingSegments) {
     if (!segment || !(segment.uri || segment.savedUri)) continue;
-    const start = Number(segment.startBoutTs) || 0;
-    const durationSec = Math.max(0, Number(segment.durationMs || 0) / 1000);
-    const end = start + durationSec;
-    if (target >= start - 0.05 && (durationSec <= 0 || target <= end + 0.25)) return segment;
-    if (start <= target) fallback = segment;
+    if ((Number(segment.startBoutTs) || 0) <= target) fallback = segment;
   }
   return fallback || M.recordingSegments[M.recordingSegments.length - 1];
 }
@@ -3018,15 +3033,24 @@ function videoReviewSource(index = latestReviewableEventIndex()) {
     };
   }
   const event = M && M.events && index >= 0 ? M.events[index] : null;
-  const segment = event ? recordedSegmentForBoutTime(overlayEventTime(event)) : null;
-  const segmentSource = sourceFromRecordedSegment(segment);
+  const eventBoutTime = event ? overlayEventTime(event) : 0;
+  const segmentSource = sourceFromRecordedSegment(event ? recordedSegmentForBoutTime(eventBoutTime) : null);
   if (segmentSource) return segmentSource;
+  // No stored footage covers this action. If the camera is still rolling, the
+  // footage lives in the unfinalized recording: report no source so the
+  // caller stops the recording and reopens the review on the fresh segment.
+  if (_camState === 'recording') return null;
+  const nearestSource = sourceFromRecordedSegment(event ? nearestRecordedSegment(eventBoutTime) : null);
+  if (nearestSource) return nearestSource;
   if (_nativeRecordedPayload && (_nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri)) {
+    const payloadStart = Number(_nativeRecordedPayload.startBoutTs);
     return {
       uri: _nativeRecordedPayload.uri || _nativeRecordedPayload.savedUri,
       durationSec: Number(_nativeRecordedPayload.durationMs || 0) / 1000,
-      timeOffset: M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined ? Number(M.recordingStartBoutTs) : 0,
+      timeOffset: Number.isFinite(payloadStart) ? payloadStart
+        : (M && M.recordingStartBoutTs !== null && M.recordingStartBoutTs !== undefined ? Number(M.recordingStartBoutTs) : 0),
       useRecordingPauses: true,
+      pauses: Array.isArray(_nativeRecordedPayload.pauses) ? _nativeRecordedPayload.pauses : undefined,
       sourceType: 'recorded',
     };
   }
