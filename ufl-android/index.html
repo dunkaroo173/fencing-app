@@ -2326,6 +2326,14 @@ function markRecordingStart(boutElapsed) {
     M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
     M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
     M.recordingPauses = [];
+    if (!M.running) {
+      // The camera is rolling but the clock is parked (start countdown, or a
+      // recording restart while a review decision is being made). Open a pause
+      // span at video 0 so the bout<->video mapping accounts for the dead time
+      // until the clock resumes - otherwise every later event maps that many
+      // seconds early into the footage.
+      _recPauseOpen = { startVideo: 0, boutTime: _recBoutStart };
+    }
     if (typeof scheduleSave === 'function') scheduleSave();
   }
   return _recBoutStart;

@@ -872,6 +872,7 @@ test.describe('native video review', () => {
         recordingActive: _nativeRecordingActive,
         running,
         corrected: M.events[0],
+        restartPauses: M.recordingPauses,
       };
     });
 
@@ -889,6 +890,12 @@ test.describe('native video review', () => {
     expect(result.reviewPayloads[0].eventIndex).toBe(0);
     // Correcting the last pending action resumes the bout clock.
     expect(result.running).toBe(true);
+    // The restarted recording ran under a parked clock until the correction
+    // was saved: that dead time must be recorded as a pause span from video 0,
+    // or later events map too early into the footage.
+    expect(result.restartPauses).toHaveLength(1);
+    expect(result.restartPauses[0].startVideo).toBe(0);
+    expect(result.restartPauses[0].endVideo).toBeGreaterThan(0);
     expect(result.corrected.side).toBe('L');
     expect(result.corrected.actionId).toBe(103);
   });
