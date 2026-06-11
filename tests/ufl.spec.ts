@@ -1418,14 +1418,26 @@ test.describe('native video review', () => {
         { ts: 10, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true, reviewStatus: 'corrected' },
         { ts: 10, period: 1, side: 'C', actionId: 3, label: 'Video Review', emoji: 'V', isHit: false, reviewOutcome: 'overturned:annulled' },
       ];
-      return {
-        at10: (window as any).visibleOverlayEvent(10.5)?.ev?.side,
-        windowEnd: (window as any).visibleOverlayEvent(12.6), // past the 2.5s pill window
+      const simple = {
+        at10: (window as any).visibleOverlayEvent(10.5, 0, false)?.ev?.side,
+        windowEnd: (window as any).visibleOverlayEvent(12.6, 0, false), // past the 2.5s pill window
       };
+      // Clock parked at bout 10 from video 12s to 30s (a review interaction).
+      // The pill must show ONCE at its video anchor, not again throughout the
+      // parked span where bout time stays inside the window.
+      M.recordingPauses = [{ startVideo: 12, endVideo: 30, boutTime: 10 }];
+      const parked = {
+        atAnchor: (window as any).visibleOverlayEvent(11, 0, true)?.ev?.side,
+        duringParkedSpan: (window as any).visibleOverlayEvent(20, 0, true),
+      };
+      M.recordingPauses = [];
+      return { simple, parked };
     });
 
-    expect(result.at10).toBe('R'); // the fencer action wins, not the referee event
-    expect(result.windowEnd).toBeNull();
+    expect(result.simple.at10).toBe('R'); // the fencer action wins, not the referee event
+    expect(result.simple.windowEnd).toBeNull();
+    expect(result.parked.atAnchor).toBe('R');
+    expect(result.parked.duringParkedSpan).toBeNull(); // no second pill while the clock is parked
   });
 
   test('review payload carries progress over reviewable events', async ({ page }) => {

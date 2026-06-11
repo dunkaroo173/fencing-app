@@ -290,8 +290,44 @@ public class NativeOverlayExporter {
         double boutTime = videoTimeToBoutTime(videoTime, timeOffset, useRecordingPauses, match);
         JSONObject state = replayStateAt(boutTime, match);
         drawHud(canvas, width, height, state);
-        JSONObject ev = visibleEvent(boutTime, match);
-        if (ev != null) drawActionPill(canvas, width, height, ev, boutTime - overlayEventTime(ev, match));
+        // Anchor pills in video time - a bout-time window repeats wherever the
+        // clock was parked, doubling the pill for reviewed actions.
+        JSONArray events = match.optJSONArray("events");
+        JSONObject pillEvent = null;
+        double pillElapsed = 0;
+        for (int i = 0; events != null && i < events.length(); i++) {
+            JSONObject ev = events.optJSONObject(i);
+            if (ev == null || ev.optInt("actionId", 0) == 3) continue;
+            double anchor = boutTimeToVideoTime(overlayEventTime(ev, match), timeOffset, useRecordingPauses, match);
+            double elapsed = videoTime - anchor;
+            if (elapsed >= 0 && elapsed < 2.5) {
+                pillEvent = ev;
+                pillElapsed = elapsed;
+            }
+        }
+        if (pillEvent != null) drawActionPill(canvas, width, height, pillEvent, pillElapsed);
+    }
+
+    private double boutTimeToVideoTime(double target, double timeOffset, boolean useRecordingPauses, JSONObject match) {
+        if (!useRecordingPauses) return Math.max(0.0, target - timeOffset);
+        JSONArray pauses = match.optJSONArray("recordingPauses");
+        if (pauses == null) return Math.max(0.0, target - timeOffset);
+        double pausedTotal = 0;
+        for (int i = 0; i < pauses.length(); i++) {
+            JSONObject p = pauses.optJSONObject(i);
+            if (p == null) continue;
+            double start = p.optDouble("startVideo", Double.NaN);
+            double end = p.optDouble("endVideo", Double.NaN);
+            if (!Double.isFinite(start) || !Double.isFinite(end) || end <= start) continue;
+            double timelineBoutAtPauseStart = start + timeOffset - pausedTotal;
+            double stored = p.optDouble("boutTime", timelineBoutAtPauseStart);
+            double freeze = Math.max(stored, timelineBoutAtPauseStart);
+            if (target < freeze || Math.abs(target - freeze) < 0.05) {
+                return Math.max(0.0, target >= timelineBoutAtPauseStart ? start : target - timeOffset + pausedTotal);
+            }
+            pausedTotal += end - start;
+        }
+        return Math.max(0.0, target - timeOffset + pausedTotal);
     }
 
     private void drawHud(Canvas canvas, int w, int h, JSONObject state) throws Exception {
@@ -383,20 +419,6 @@ public class NativeOverlayExporter {
         p.setColor(ev.optBoolean("isHit", false) ? Color.rgb(2, 4, 10) : Color.rgb(34, 22, 0));
         canvas.drawText(result, w / 2f, by + badgeH * 0.66f, p);
         p.setAlpha(255);
-    }
-
-    private JSONObject visibleEvent(double boutTime, JSONObject match) throws Exception {
-        JSONArray events = match.optJSONArray("events");
-        if (events == null) return null;
-        JSONObject visible = null;
-        for (int i = 0; i < events.length(); i++) {
-            JSONObject ev = events.getJSONObject(i);
-            // Review outcome events (actionId 3) are not standalone pills.
-            if (ev.optInt("actionId", 0) == 3) continue;
-            double t = overlayEventTime(ev, match);
-            if (boutTime >= t && boutTime < t + 2.5) visible = ev;
-        }
-        return visible;
     }
 
     private JSONObject replayStateAt(double boutTime, JSONObject match) throws Exception {

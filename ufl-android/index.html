@@ -2382,24 +2382,28 @@ function waitForVideoReady(video, timeoutMs = 2500) {
 const PILL_SECONDS = 2.5;
 const PILL_FADE_START = 2.0;
 
-// Review outcome events (referee, actionId 3) never render as their own pill;
-// they appear as a badge on the fencer's action instead.
-function visibleOverlayEvent(boutTime) {
+// Pills anchor in VIDEO time: a bout-time window repeats wherever the clock
+// was parked, which doubled the pill for reviewed actions. Review outcome
+// events (referee, actionId 3) never render as their own pill - they appear
+// as a badge on the fencer's action instead.
+function visibleOverlayEvent(videoTime, timeOffset, useRecordingPauses) {
   if (!M || !Array.isArray(M.events)) return null;
-  return M.events
-    .map(ev => ({ ev, t: overlayEventTime(ev) }))
-    .filter(x => x.ev && x.ev.actionId !== 3 && boutTime >= x.t && boutTime < x.t + PILL_SECONDS)
-    .pop() || null;
+  let best = null;
+  M.events.forEach(ev => {
+    if (!ev || ev.actionId === 3) return;
+    const anchor = boutTimeToVideoTime(overlayEventTime(ev), timeOffset, useRecordingPauses);
+    const elapsed = videoTime - anchor;
+    if (elapsed >= 0 && elapsed < PILL_SECONDS) best = { ev, elapsed };
+  });
+  return best;
 }
 
 function drawImportedOverlay(ctx, W, H, currentTime, timeOffset, useRecordingPauses) {
   if (!M || !M.events) return;
-  const boutTime = videoTimeToBoutTime(currentTime, timeOffset, useRecordingPauses);
-  const visible = visibleOverlayEvent(boutTime);
+  const visible = visibleOverlayEvent(currentTime, timeOffset, useRecordingPauses);
   if (!visible) return;
-  const elapsed = boutTime - visible.t;
-  const alpha = elapsed < PILL_FADE_START ? 1
-    : Math.max(0, 1 - (elapsed - PILL_FADE_START) / (PILL_SECONDS - PILL_FADE_START));
+  const alpha = visible.elapsed < PILL_FADE_START ? 1
+    : Math.max(0, 1 - (visible.elapsed - PILL_FADE_START) / (PILL_SECONDS - PILL_FADE_START));
   drawActionPill(ctx, W, H, visible.ev, alpha);
 }
 

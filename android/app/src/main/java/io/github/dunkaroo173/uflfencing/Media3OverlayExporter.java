@@ -207,8 +207,25 @@ class Media3OverlayExporter {
             double boutTime = videoTimeToBoutTime(videoTime);
             JSONObject state = replayStateAt(boutTime);
             drawHud(canvas, width, height, state);
-            JSONObject event = visibleEvent(boutTime);
-            if (event != null) drawActionPill(canvas, width, height, event, boutTime - overlayEventTime(event));
+            // Pills anchor in VIDEO time: a bout-time window repeats wherever
+            // the clock is parked (e.g. the start of a post-review segment),
+            // which made a corrected action's pill render twice.
+            ensureEventAnchors();
+            JSONArray events = match.optJSONArray("events");
+            JSONObject pillEvent = null;
+            double pillElapsed = 0;
+            for (int i = 0; events != null && i < events.length(); i++) {
+                JSONObject ev = events.optJSONObject(i);
+                if (ev == null || ev.optInt("actionId", 0) == 3) continue;
+                double anchor = eventAnchors[i];
+                if (anchor < 0) continue;
+                double elapsed = videoTime - anchor;
+                if (elapsed >= 0 && elapsed < PILL_SECONDS) {
+                    pillEvent = ev;
+                    pillElapsed = elapsed;
+                }
+            }
+            if (pillEvent != null) drawActionPill(canvas, width, height, pillEvent, pillElapsed);
         }
 
         private void drawHud(Canvas canvas, int width, int height, JSONObject state) {
@@ -307,20 +324,64 @@ class Media3OverlayExporter {
             return null;
         }
 
-        private JSONObject visibleEvent(double boutTime) {
+        private double[] eventAnchors;
+
+        private void ensureEventAnchors() {
+            if (eventAnchors != null) return;
             JSONArray events = match.optJSONArray("events");
-            if (events == null) return null;
-            JSONObject visible = null;
-            for (int i = 0; i < events.length(); i++) {
-                JSONObject event = events.optJSONObject(i);
-                if (event == null) continue;
-                // Video-review outcome events (referee, actionId 3) render as a
-                // badge on the fencer's pill, never as their own pill.
-                if (event.optInt("actionId", 0) == 3) continue;
-                double t = overlayEventTime(event);
-                if (boutTime >= t && boutTime < t + PILL_SECONDS) visible = event;
+            int count = events == null ? 0 : events.length();
+            eventAnchors = new double[count];
+            for (int i = 0; i < count; i++) {
+                JSONObject ev = events.optJSONObject(i);
+                eventAnchors[i] = ev == null ? -1 : eventVideoAnchor(ev);
             }
-            return visible;
+        }
+
+        // The video position where an event's bout time appears in the output.
+        private double eventVideoAnchor(JSONObject event) {
+            double bout = overlayEventTime(event);
+            if (segments != null && segments.length() > 0) {
+                double cursor = 0.0;
+                for (int i = 0; i < segments.length(); i++) {
+                    JSONObject segment = segments.optJSONObject(i);
+                    if (segment == null) continue;
+                    double duration = Math.max(0.0, segment.optDouble("durationMs", 0.0) / 1000.0);
+                    double startBout = segment.optDouble("startBoutTs", 0.0);
+                    JSONArray pauses = segment.optJSONArray("pauses");
+                    double endBout = segmentVideoTimeToBoutTime(duration, startBout, pauses);
+                    boolean covers = bout >= startBout - 0.05 && bout <= endBout + 0.5;
+                    if (covers || i == segments.length() - 1) {
+                        double within = segmentBoutTimeToVideoTime(bout, startBout, pauses);
+                        if (duration > 0) within = Math.min(within, duration);
+                        return cursor + Math.max(0.0, within);
+                    }
+                    cursor += duration;
+                }
+            }
+            return segmentBoutTimeToVideoTime(bout, timeOffset,
+                    useRecordingPauses ? match.optJSONArray("recordingPauses") : null);
+        }
+
+        // Inverse of segmentVideoTimeToBoutTime: parked-clock spans map a bout
+        // time to the video position where the pause began.
+        private double segmentBoutTimeToVideoTime(double target, double offset, JSONArray pauses) {
+            if (pauses == null) return Math.max(0.0, target - offset);
+            double pausedTotal = 0;
+            for (int i = 0; i < pauses.length(); i++) {
+                JSONObject pause = pauses.optJSONObject(i);
+                if (pause == null) continue;
+                double start = pause.optDouble("startVideo", Double.NaN);
+                double end = pause.optDouble("endVideo", Double.NaN);
+                if (!Double.isFinite(start) || !Double.isFinite(end) || end <= start) continue;
+                double timelineBoutAtPauseStart = start + offset - pausedTotal;
+                double stored = pause.optDouble("boutTime", timelineBoutAtPauseStart);
+                double freeze = Math.max(stored, timelineBoutAtPauseStart);
+                if (target < freeze || Math.abs(target - freeze) < 0.05) {
+                    return Math.max(0.0, target >= timelineBoutAtPauseStart ? start : target - offset + pausedTotal);
+                }
+                pausedTotal += end - start;
+            }
+            return Math.max(0.0, target - offset + pausedTotal);
         }
 
         private JSONObject replayStateAt(double boutTime) {
