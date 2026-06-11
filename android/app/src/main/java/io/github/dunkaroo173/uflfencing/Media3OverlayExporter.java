@@ -177,6 +177,9 @@ class Media3OverlayExporter {
         private final JSONArray segments;
         private final double timeOffset;
         private final boolean useRecordingPauses;
+        private static final double PILL_SECONDS = 2.5;
+        private static final double PILL_FADE_START = 2.0;
+
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         FencingCanvasOverlay(JSONObject match, double timeOffset, boolean useRecordingPauses) {
@@ -250,16 +253,18 @@ class Media3OverlayExporter {
         }
 
         private void drawActionPill(Canvas canvas, int width, int height, JSONObject event, double elapsed) {
-            float alpha = elapsed < 2.4 ? 1f : Math.max(0f, (float) (1.0 - (elapsed - 2.4) / 0.6));
+            float alpha = elapsed < PILL_FADE_START ? 1f
+                    : Math.max(0f, (float) (1.0 - (elapsed - PILL_FADE_START) / (PILL_SECONDS - PILL_FADE_START)));
             if (alpha <= 0f) return;
             int sideColor = sideColor(event.optString("side", "C"));
             String sideName = "L".equals(event.optString("side")) ? "LEFT" : "R".equals(event.optString("side")) ? "RIGHT" : "REFEREE";
             String action = event.optString("label", "ACTION").toUpperCase(Locale.US);
             String result = event.optBoolean("isHit", false) ? "TOUCH" : "OFF TARGET";
+            String review = reviewBadge(event);
             float titleSize = Math.max(19, height * 0.036f);
             float resultSize = Math.max(11, height * 0.019f);
             float pillW = Math.min(width - 48, Math.max(width * 0.48f, titleSize * Math.max(10, action.length() * 0.62f)));
-            float pillH = Math.max(92, titleSize * 3.0f);
+            float pillH = Math.max(review != null ? 110 : 92, titleSize * (review != null ? 3.6f : 3.0f));
             float x = width / 2f - pillW / 2f;
             float y = height * 0.78f - pillH / 2f;
 
@@ -278,14 +283,28 @@ class Media3OverlayExporter {
             paint.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD));
             paint.setTextSize(Math.max(10, height * 0.016f));
             paint.setColor(sideColor);
-            canvas.drawText(sideName + " ACTION", width / 2f, y + pillH * 0.25f, paint);
+            canvas.drawText(sideName + " ACTION", width / 2f, y + pillH * (review != null ? 0.20f : 0.25f), paint);
             paint.setTextSize(titleSize);
             paint.setColor(Color.WHITE);
-            canvas.drawText(action, width / 2f, y + pillH * 0.54f, paint);
+            canvas.drawText(action, width / 2f, y + pillH * (review != null ? 0.46f : 0.54f), paint);
             paint.setTextSize(resultSize);
             paint.setColor(event.optBoolean("isHit", false) ? sideColor : Color.rgb(255, 206, 84));
-            canvas.drawText(result, width / 2f, y + pillH * 0.82f, paint);
+            canvas.drawText(result, width / 2f, y + pillH * (review != null ? 0.68f : 0.82f), paint);
+            if (review != null) {
+                paint.setTextSize(Math.max(10, height * 0.016f));
+                paint.setColor(Color.argb(190, 255, 255, 255));
+                canvas.drawText(review, width / 2f, y + pillH * 0.88f, paint);
+            }
             paint.setAlpha(255);
+        }
+
+        // The referee's review outcome is secondary context on the fencer's
+        // action, not an action of its own.
+        private static String reviewBadge(JSONObject event) {
+            String status = event.optString("reviewStatus", "");
+            if ("confirmed".equals(status)) return "VIDEO REVIEW - KEPT";
+            if ("corrected".equals(status) || "overturned".equals(status)) return "VIDEO REVIEW - CORRECTED";
+            return null;
         }
 
         private JSONObject visibleEvent(double boutTime) {
@@ -295,8 +314,11 @@ class Media3OverlayExporter {
             for (int i = 0; i < events.length(); i++) {
                 JSONObject event = events.optJSONObject(i);
                 if (event == null) continue;
+                // Video-review outcome events (referee, actionId 3) render as a
+                // badge on the fencer's pill, never as their own pill.
+                if (event.optInt("actionId", 0) == 3) continue;
                 double t = overlayEventTime(event);
-                if (boutTime >= t && boutTime < t + 3.0) visible = event;
+                if (boutTime >= t && boutTime < t + PILL_SECONDS) visible = event;
             }
             return visible;
         }

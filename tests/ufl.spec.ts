@@ -1216,6 +1216,89 @@ test.describe('native video review', () => {
     expect(result.runningAfterCorrection).toBe(true);
   });
 
+  test('review opens the latest pending action by bout time, not array order', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
+      // Annotated out of order: the 30s action was recorded after the 50s one.
+      M.events = [
+        { ts: 50, period: 1, side: 'L', actionId: 101, label: 'Compound', emoji: 'C', isHit: false },
+        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).startVideoReviewForIndex();
+      return (window as any).__reviewPayload;
+    });
+
+    expect(result.eventIndex).toBe(0); // ts 50 is the latest by bout time
+  });
+
+  test('a review decision returns to the match even with other pending reviews', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(async () => {
+      const payloads: any[] = [];
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview(json: string) { payloads.push(JSON.parse(json)); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 20, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.1,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      (window as any).doConfirm('L', 103, true);
+      await new Promise(resolve => setTimeout(resolve, 350));
+      const running = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
+      return {
+        reviewLaunches: payloads.length,
+        running,
+        stale: { startedFromRecording: _reviewStartedFromRecording, cachedSource: _activeVideoReviewSource },
+      };
+    });
+
+    expect(result.reviewLaunches).toBe(0); // decided -> back to the match, no auto-reopen
+    expect(result.running).toBe(true);
+    expect(result.stale.startedFromRecording).toBe(false);
+    expect(result.stale.cachedSource).toBeNull();
+  });
+
+  test('export overlay shows the fencer action with a review badge, never a referee pill', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      M.events = [
+        { ts: 10, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true, reviewStatus: 'corrected' },
+        { ts: 10, period: 1, side: 'C', actionId: 3, label: 'Video Review', emoji: 'V', isHit: false, reviewOutcome: 'overturned:annulled' },
+      ];
+      return {
+        at10: (window as any).visibleOverlayEvent(10.5)?.ev?.side,
+        windowEnd: (window as any).visibleOverlayEvent(12.6), // past the 2.5s pill window
+      };
+    });
+
+    expect(result.at10).toBe('R'); // the fencer action wins, not the referee event
+    expect(result.windowEnd).toBeNull();
+  });
+
   test('review payload carries progress over reviewable events', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);

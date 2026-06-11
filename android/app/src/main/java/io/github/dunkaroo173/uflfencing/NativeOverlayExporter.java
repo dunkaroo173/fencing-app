@@ -391,8 +391,10 @@ public class NativeOverlayExporter {
         JSONObject visible = null;
         for (int i = 0; i < events.length(); i++) {
             JSONObject ev = events.getJSONObject(i);
+            // Review outcome events (actionId 3) are not standalone pills.
+            if (ev.optInt("actionId", 0) == 3) continue;
             double t = overlayEventTime(ev, match);
-            if (boutTime >= t && boutTime < t + 3.0) visible = ev;
+            if (boutTime >= t && boutTime < t + 2.5) visible = ev;
         }
         return visible;
     }
