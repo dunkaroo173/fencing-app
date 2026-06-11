@@ -438,6 +438,14 @@ public class AndroidVideoBridge {
         values.clear();
         values.put(MediaStore.Video.Media.IS_PENDING, 0);
         resolver.update(uri, values, null, null);
+
+        // The transformer carries the SOURCE video's creation_time into the
+        // output container, and the media scanner dates the gallery entry from
+        // it - an export of Monday's footage lands in Monday's camera roll.
+        // Re-stamp after publishing (the scanner re-extracts on IS_PENDING=0).
+        values.clear();
+        values.put(MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis());
+        resolver.update(uri, values, null, null);
         return uri;
     }
 }
