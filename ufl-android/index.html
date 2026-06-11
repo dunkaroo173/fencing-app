@@ -3042,26 +3042,22 @@ function eventReviewTitle(ev, index) {
   return `#${index + 1} ${sideName}: ${String(ev.label || '').toUpperCase()} - ${result} (${status})`;
 }
 
-// Latest fencer action by bout time (not array order - corrections and
-// scrub-back annotation can reorder the array): pending first, else any.
+// Latest fencer action by bout time - always, reviewed or not. The review
+// button means "show me what just happened"; older actions are reachable via
+// PREV inside the review.
 function latestReviewableEventIndex() {
   if (!M || !Array.isArray(M.events) || M.events.length === 0) return -1;
-  const latest = (pendingOnly) => {
-    let best = -1;
-    let bestTime = null;
-    M.events.forEach((ev, i) => {
-      if (!ev || (ev.side !== 'L' && ev.side !== 'R')) return;
-      if (pendingOnly && ev.reviewed) return;
-      const t = overlayEventTime(ev);
-      if (best === -1 || t > bestTime || (t === bestTime && i > best)) {
-        best = i;
-        bestTime = t;
-      }
-    });
-    return best;
-  };
-  const pending = latest(true);
-  return pending >= 0 ? pending : latest(false);
+  let best = -1;
+  let bestTime = null;
+  M.events.forEach((ev, i) => {
+    if (!ev || (ev.side !== 'L' && ev.side !== 'R')) return;
+    const t = overlayEventTime(ev);
+    if (best === -1 || t > bestTime || (t === bestTime && i > best)) {
+      best = i;
+      bestTime = t;
+    }
+  });
+  return best;
 }
 
 function startVideoReviewForIndex(index = latestReviewableEventIndex()) {

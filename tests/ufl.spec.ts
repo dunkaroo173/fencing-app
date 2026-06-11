@@ -1238,6 +1238,29 @@ test.describe('native video review', () => {
     expect(result.eventIndex).toBe(0); // ts 50 is the latest by bout time
   });
 
+  test('the review button opens the latest action even when it is already reviewed', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).__reviewPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__reviewPayload = JSON.parse(json); },
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
+      M.events = [
+        { ts: 10, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+        { ts: 30, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true, reviewStatus: 'confirmed' },
+      ];
+      (window as any).startVideoReviewForIndex();
+      return (window as any).__reviewPayload;
+    });
+
+    // The reviewed 30s action is still the latest; the pending 10s one is
+    // reachable via PREV inside the review.
+    expect(result.eventIndex).toBe(1);
+  });
+
   test('a review decision returns to the match even with other pending reviews', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);

@@ -85,6 +85,7 @@ class NativeCameraRecorder {
             return;
         }
         try {
+            applyTargetRotation();
             activeDisplayName = safeFilePart(filenameBase, "ufl-recording") + ".mp4";
             File dir = new File(activity.getCacheDir(), "native-recording-segments");
             if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Could not create recording cache");
@@ -144,7 +145,23 @@ class NativeCameraRecorder {
 
         cameraProvider.unbindAll();
         cameraProvider.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, preview, videoCapture);
+        applyTargetRotation();
         Log.i(TAG, "bindUseCases complete");
+    }
+
+    // CameraX captures the display rotation when the use case is created; if
+    // the app was launched while the phone was held portrait (before the
+    // landscape lock settled), every recording that session gets tagged
+    // portrait. Re-read the settled display rotation before each recording.
+    private void applyTargetRotation() {
+        try {
+            android.view.Display display = previewView.getDisplay();
+            if (display != null && videoCapture != null) {
+                videoCapture.setTargetRotation(display.getRotation());
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "setTargetRotation failed", e);
+        }
     }
 
     private void handleRecordEvent(VideoRecordEvent event) {
