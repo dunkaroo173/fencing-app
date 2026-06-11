@@ -1301,6 +1301,7 @@ function applyAnnulOverturn() {
     setTimeout(() => startVideoReviewForIndex(index), 250);
   } else {
     setOverlayStatus('Touch annulled. All actions reviewed.', false);
+    if (!M.finished) startTimer();
   }
 }
 
@@ -1458,7 +1459,10 @@ function doConfirm(side, actionId, isHit) {
       setOverlayStatus('Correction saved.', false);
       setTimeout(() => startVideoReviewForIndex(editedIndex), 250);
     } else {
+      // No review to return to - resume the bout clock (closing any open
+      // recording pause span), as the keep/close review exits do.
       setOverlayStatus('Correction saved. All actions reviewed.', false);
+      if (!M.finished) startTimer();
     }
     return;
   }

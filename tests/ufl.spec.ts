@@ -857,6 +857,11 @@ test.describe('native video review', () => {
       });
       (window as any).doConfirm('L', 103, true);
       await new Promise(resolve => setTimeout(resolve, 320));
+      const running = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
       return {
         launched,
         stopped,
@@ -865,7 +870,7 @@ test.describe('native video review', () => {
         reviewPayloads,
         camState: _camState,
         recordingActive: _nativeRecordingActive,
-        running: M.running,
+        running,
         corrected: M.events[0],
       };
     });
@@ -882,7 +887,8 @@ test.describe('native video review', () => {
     expect(result.reviewPayloads[0].sourceType).toBe('recorded');
     expect(result.reviewPayloads[0].sourceUri).toBe('content://recorded/review.mp4');
     expect(result.reviewPayloads[0].eventIndex).toBe(0);
-    expect(result.running).toBe(false);
+    // Correcting the last pending action resumes the bout clock.
+    expect(result.running).toBe(true);
     expect(result.corrected.side).toBe('L');
     expect(result.corrected.actionId).toBe(103);
   });
@@ -1065,17 +1071,24 @@ test.describe('native video review', () => {
       }));
       const chooserVisible = document.getElementById('overturn-chooser')?.classList.contains('on');
       document.getElementById('ovr-annul')?.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      const runningAfterAnnul = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
       return {
         scoreBefore,
         scoreL: M.scoreL,
         scoreR: M.scoreR,
         chooserVisible,
+        runningAfterAnnul,
         annulled: M.events[0],
         review: M.events[1],
       };
     });
 
     expect(result.chooserVisible).toBe(true);
+    expect(result.runningAfterAnnul).toBe(true);
     expect(result.scoreBefore).toEqual({ l: 0, r: 1 });
     expect(result.scoreL).toBe(0);
     expect(result.scoreR).toBe(0);
@@ -1168,6 +1181,39 @@ test.describe('native video review', () => {
     expect(result.eventUntouched).toBe(true);
     expect(result.payloads).toBe(1);
     expect(result.editId).toBeNull();
+  });
+
+  test('correcting the last pending action resumes the match clock', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = {
+        closeVideoReview() {},
+        startVideoReview() {},
+      };
+      M.events = [
+        { ts: 8, period: 1, side: 'R', actionId: 210, label: 'Parry-Riposte', emoji: 'P', isHit: true },
+      ];
+      (window as any).onAndroidVideoReviewEdit(JSON.stringify({
+        eventIndex: 0,
+        chosenTime: 8.2,
+        clipStart: 3,
+        clipEnd: 10,
+        playbackRate: 0.5,
+      }));
+      const runningDuringCorrection = M.running;
+      (window as any).doConfirm('L', 103, true);
+      const runningAfterCorrection = M.running;
+      if (_timerInterval) {
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+      }
+      return { runningDuringCorrection, runningAfterCorrection };
+    });
+
+    expect(result.runningDuringCorrection).toBe(false);
+    expect(result.runningAfterCorrection).toBe(true);
   });
 
   test('review payload carries progress over reviewable events', async ({ page }) => {
