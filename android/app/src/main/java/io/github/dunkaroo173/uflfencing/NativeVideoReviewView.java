@@ -2,6 +2,7 @@ package io.github.dunkaroo173.uflfencing;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.util.Log;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -38,6 +39,7 @@ class NativeVideoReviewView extends FrameLayout {
         void onError(String message);
     }
 
+    private static final String TAG = "UFLReviewView";
     private static final long TICK_MS = 120L;
     private static final double DEFAULT_LEAD_SEC = 5.0;
     private static final double DEFAULT_TAIL_SEC = 2.0;
@@ -314,10 +316,24 @@ class NativeVideoReviewView extends FrameLayout {
                 player.addListener(new Player.Listener() {
                     @Override
                     public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                        Log.e(TAG, "player error", error);
                         if (callback != null) callback.onError(error.getMessage() == null ? error.toString() : error.getMessage());
+                    }
+
+                    @Override
+                    public void onPlaybackStateChanged(int state) {
+                        Log.i(TAG, "playbackState=" + state + " pos=" + (player == null ? -1 : player.getCurrentPosition()));
+                        if (state == Player.STATE_READY) clampClipToMedia();
+                    }
+
+                    @Override
+                    public void onIsPlayingChanged(boolean isPlaying) {
+                        Log.i(TAG, "isPlaying=" + isPlaying + " pos=" + (player == null ? -1 : player.getCurrentPosition()));
                     }
                 });
             }
+            Log.i(TAG, "show mode=" + (annotateMode ? "annotate" : "review") + " clip=" + clipStartSec + "-" + clipEndSec
+                    + " rate=" + playbackRate + " uri=" + uri);
             player.setMediaItem(MediaItem.fromUri(Uri.parse(uri)));
             player.prepare();
             player.setPlaybackParameters(new PlaybackParameters((float) playbackRate));
@@ -350,6 +366,8 @@ class NativeVideoReviewView extends FrameLayout {
 
     private void togglePlay() {
         if (player == null) return;
+        Log.i(TAG, "togglePlay state=" + player.getPlaybackState() + " playing=" + player.isPlaying()
+                + " pos=" + player.getCurrentPosition() + " dur=" + player.getDuration());
         if (player.isPlaying()) {
             player.pause();
         } else {
@@ -364,6 +382,8 @@ class NativeVideoReviewView extends FrameLayout {
 
     private void replay() {
         if (player == null) return;
+        Log.i(TAG, "replay state=" + player.getPlaybackState() + " pos=" + player.getCurrentPosition()
+                + " dur=" + player.getDuration() + " clipStartMs=" + secondsToMs(clipStartSec));
         player.seekTo(secondsToMs(clipStartSec));
         player.play();
     }
@@ -377,7 +397,27 @@ class NativeVideoReviewView extends FrameLayout {
     private void shift(double deltaSec) {
         if (player == null) return;
         double target = clamp(currentSec() + deltaSec, clipStartSec, clipEndSec);
+        Log.i(TAG, "shift delta=" + deltaSec + " state=" + player.getPlaybackState()
+                + " from=" + player.getCurrentPosition() + " toMs=" + secondsToMs(target) + " dur=" + player.getDuration());
         player.seekTo(secondsToMs(target));
+        syncUi();
+    }
+
+    // The clip is computed from the bout clock, but the footage can be shorter
+    // (e.g. a recording that died mid-bout). Clamp to the real media duration so
+    // the review shows the final seconds instead of a dead player at EOF.
+    private void clampClipToMedia() {
+        if (player == null) return;
+        long durationMs = player.getDuration();
+        if (durationMs == androidx.media3.common.C.TIME_UNSET || durationMs <= 0) return;
+        double durationSec = durationMs / 1000.0;
+        if (clipEndSec <= durationSec) return;
+        Log.w(TAG, "clip " + clipStartSec + "-" + clipEndSec + " exceeds media duration " + durationSec + "; clamping");
+        clipEndSec = durationSec;
+        if (clipStartSec > clipEndSec - 0.5) {
+            clipStartSec = Math.max(0.0, clipEndSec - (DEFAULT_LEAD_SEC + DEFAULT_TAIL_SEC));
+            player.seekTo(secondsToMs(clipStartSec));
+        }
         syncUi();
     }
 

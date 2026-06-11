@@ -43,6 +43,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Match tool with live recording: if the screen sleeps, the activity
+        // pauses and CameraX kills the recording mid-bout. Keep the screen on.
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         FrameLayout root = new FrameLayout(this);
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
