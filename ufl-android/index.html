@@ -2688,7 +2688,9 @@ function nativeOverlayPayload(sourceType, sourceUri, opts = {}) {
   if (match && Array.isArray(match.recordingPauses)) {
     match.recordingPauses = sanitizeRecordingPauses(match.recordingPauses);
   }
-  const extless = overlayFilename(sourceType, 'mp4').replace(/\.mp4$/, '');
+  // "overlay" in the name distinguishes finished exports from the raw
+  // recording segments that share the DCIM folder.
+  const extless = overlayFilename(sourceType + '-overlay', 'mp4').replace(/\.mp4$/, '');
   const payload = {
     sourceType,
     sourceUri,
