@@ -298,6 +298,9 @@ class NativeVideoReviewView extends FrameLayout {
                     @Override
                     public void onPlayerError(androidx.media3.common.PlaybackException error) {
                         Log.e(TAG, "player error", error);
+                        // Never leave the opaque review view covering the app
+                        // when playback is dead.
+                        hide();
                         if (callback != null) callback.onError(error.getMessage() == null ? error.toString() : error.getMessage());
                     }
 
@@ -325,6 +328,7 @@ class NativeVideoReviewView extends FrameLayout {
             handler.removeCallbacks(ticker);
             handler.post(ticker);
         } catch (Exception e) {
+            hide();
             if (callback != null) callback.onError(e.getMessage() == null ? e.toString() : e.getMessage());
         }
     }

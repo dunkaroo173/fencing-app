@@ -46,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
         // Match tool with live recording: if the screen sleeps, the activity
         // pauses and CameraX kills the recording mid-bout. Keep the screen on.
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyImmersiveMode();
 
         FrameLayout root = new FrameLayout(this);
         webView = new WebView(this);
@@ -428,8 +429,37 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+    // The legacy windowFullscreen theme flag is ignored under Android 15's
+    // enforced edge-to-edge (targetSdk 35), leaving system bars drawn over the
+    // app and eating taps on edge buttons. Hide them with the modern API.
+    private void applyImmersiveMode() {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+        controller.setSystemBarsBehavior(
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersiveMode();
+    }
+
     @Override
     public void onBackPressed() {
+        // A visible review view is opaque and topmost: back must always be able
+        // to dismiss it (and let the web layer resume the clock/recording).
+        if (nativeVideoReviewView != null && nativeVideoReviewView.getVisibility() == android.view.View.VISIBLE) {
+            nativeVideoReviewView.hide();
+            if (nativeReviewOnly) {
+                finish();
+            } else if (videoBridge != null) {
+                videoBridge.onVideoReviewClose();
+            }
+            return;
+        }
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
