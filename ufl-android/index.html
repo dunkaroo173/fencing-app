@@ -238,6 +238,13 @@ body.android-native-preview #import-preview{display:none!important}
 .rec-circle{width:9px;height:9px;border-radius:50%;background:#e62600;animation:recblink .9s infinite}
 @keyframes recblink{0%,100%{opacity:1}50%{opacity:.2}}
 .rec-label{font-family:var(--mono);font-size:11px;color:#fff;letter-spacing:1px}
+/* Persistent save indicator: lives at app-root level so it survives screen
+   switches while a native export runs in the background. */
+.save-dot{position:absolute;top:70px;left:50%;transform:translateX(-50%);display:none;align-items:center;gap:7px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;z-index:60;pointer-events:none}
+.save-dot.on{display:flex}
+.save-spin{width:9px;height:9px;border-radius:50%;border:2px solid #f5c842;border-top-color:transparent;animation:save-rot .8s linear infinite}
+@keyframes save-rot{to{transform:rotate(360deg)}}
+.save-label{font-family:var(--mono);font-size:11px;color:#fff;letter-spacing:0.5px}
 .fab{position:absolute;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-size:22px;z-index:40;box-shadow:0 4px 16px rgba(0,0,0,0.5);transition:transform .1s}
 .fab:active{transform:scale(0.93)}
 ::-webkit-scrollbar{width:3px;height:3px}
@@ -248,6 +255,12 @@ body.android-native-preview #import-preview{display:none!important}
 <body>
 <div id="portrait-overlay">⟳ ROTATE DEVICE</div>
 <div class="app-root">
+
+<!-- Save indicator: outside the screens so it stays visible everywhere -->
+<div class="save-dot" id="save-dot">
+  <div class="save-spin"></div>
+  <div class="save-label" id="save-label">Saving video…</div>
+</div>
 
 <!-- ── SCREEN 0: SETUP ── -->
 <div id="s-setup" class="screen active">
@@ -742,12 +755,15 @@ function endPeriod() {
 
 function finishMatch() {
   stopTimer();
-  stopActiveRecording({ autoStop: true });
+  const stoppingRecording = stopActiveRecording({ autoStop: true });
   M.finished = true;
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
   document.getElementById('res-resume').style.display = 'none';
   document.getElementById('fab-btn').style.display = 'flex';
+  // Auto-save the overlaid video. If the recording is still finalizing, the
+  // export triggers from onAndroidRecordingStopped once the segment lands.
+  if (!stoppingRecording) maybeAutoExportOverlay();
 }
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -777,6 +793,7 @@ async function clickStart() {
   const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
   M = newMatchState({ nameL, nameR, ...CFG });
+  _autoExportDone = false;
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
   document.getElementById('hud-name-r').textContent = nameR;
@@ -2639,6 +2656,7 @@ async function toggleCamera() {
         return;
       }
       if (shouldExportNow) exportVideo();
+      maybeAutoExportOverlay();
     };
     markRecordingStart();
     _mediaRec.start(1000);
@@ -2747,7 +2765,7 @@ function blobChunkToBase64(blob) {
 let _statusToastTimer = null;
 let _lastStatusToast = '';
 
-function setOverlayStatus(msg, busy) {
+function setOverlayStatus(msg, busy, opts = {}) {
   const status = document.getElementById('overlay-status');
   const importBtn = document.getElementById('imp-video');
   const setupImportBtn = document.getElementById('btn-import-video');
@@ -2762,7 +2780,7 @@ function setOverlayStatus(msg, busy) {
   // #overlay-status lives inside the drawer: when the drawer is closed, a
   // message there is invisible and a tap appears to do nothing. Surface it
   // as a toast on the match screen too.
-  if (msg && !document.getElementById('drawer').classList.contains('on') && msg !== _lastStatusToast) {
+  if (msg && !opts.quiet && !document.getElementById('drawer').classList.contains('on') && msg !== _lastStatusToast) {
     _lastStatusToast = msg;
     const pill = document.getElementById('hint-pill');
     pill.textContent = msg;
@@ -2941,6 +2959,43 @@ function exportTXT() {
   });
   const blob = new Blob([txt], {type:'text/plain'});
   shareOrDownload(blob, overlayFilename('report', 'txt'));
+}
+
+// ── Auto-save the overlaid video on match end ─────────────────────────────────
+// Android-native only: the Media3 export runs on a native executor, so it
+// keeps going while the user moves between screens. Browser exports stay
+// manual (the canvas renderer blocks the page).
+let _autoExportDone = false;
+
+function maybeAutoExportOverlay() {
+  if (_autoExportDone || _isRenderingOverlay) return;
+  if (!M || !M.finished) return;
+  if (!isAndroidNativeVideoAvailable()) return;
+  if (_pendingVideoReviewIndexAfterRecording !== null) return; // a review owns the next segment
+  if (_importVideoFile && _nativeImportVideo) {
+    _autoExportDone = true;
+    showSaveDot('Saving video…');
+    exportImportedOverlay();
+    return;
+  }
+  const hasFootage = (M && Array.isArray(M.recordingSegments) &&
+      M.recordingSegments.some(s => s && (s.uri || s.savedUri))) ||
+      _nativeRecordedPayload || _nativeRecordedVideo || _recBlob;
+  if (hasFootage) {
+    _autoExportDone = true;
+    showSaveDot('Saving video…');
+    exportVideo();
+  }
+}
+
+function showSaveDot(label) {
+  const dot = document.getElementById('save-dot');
+  document.getElementById('save-label').textContent = label || 'Saving video…';
+  dot.classList.add('on');
+}
+
+function hideSaveDot() {
+  document.getElementById('save-dot').classList.remove('on');
 }
 
 function exportVideo() {
@@ -3275,14 +3330,16 @@ window.onAndroidVideoSelected = function(payloadJson) {
 window.onAndroidExportProgress = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   const pct = Math.round((Number(payload.progress) || 0) * 100);
-  setOverlayStatus(`${payload.message || 'Rendering native overlay'} ${pct}%`, true);
+  showSaveDot(`Saving video… ${pct}%`);
+  setOverlayStatus(`${payload.message || 'Rendering native overlay'} ${pct}%`, true, { quiet: true });
 };
 
 window.onAndroidExportComplete = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   _isRenderingOverlay = false;
+  hideSaveDot();
   if (payload.savedUri) {
-    setOverlayStatus(`Native overlay saved to Photos/DCIM/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
+    setOverlayStatus(`Video saved to Photos/DCIM/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
     return;
   }
   setOverlayStatus('Native overlay rendered.', false);
@@ -3295,6 +3352,7 @@ window.onAndroidExportError = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   if (payload.sourceType === 'imported') setVideoImportPending(false);
   _isRenderingOverlay = false;
+  hideSaveDot();
   setOverlayStatus(payload.message || 'Native overlay export failed', false);
 };
 
@@ -3335,6 +3393,9 @@ window.onAndroidRecordingStopped = function(payloadJson) {
   }
   setOverlayStatus('Recording segment ready.', false);
   if (shouldExportNow) exportVideo();
+  // Match already ended (END MATCH stopped this recording): the final segment
+  // is stored now, so the auto-save can run against complete footage.
+  maybeAutoExportOverlay();
 };
 
 window.onAndroidRecordingError = function(payloadJson) {

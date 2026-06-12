@@ -1019,6 +1019,129 @@ test.describe('native video review', () => {
     expect(result.afterAccept).toBe(1);
   });
 
+  test('END MATCH auto-saves the recorded overlay once and shows the save indicator', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const exports: any[] = [];
+      (window as any).AndroidVideo = {
+        exportOverlay(json: string) { exports.push(JSON.parse(json)); },
+        startVideoReview() {},
+      };
+      M.recordingSegments = [
+        { uri: 'content://recorded/first.mp4', savedUri: 'content://recorded/first.mp4', durationMs: 20000, startBoutTs: 0, pauses: [], sourceType: 'recorded' },
+      ];
+      _nativeRecordedPayload = M.recordingSegments[0];
+      (window as any).finishMatch();
+      const afterFinish = exports.length;
+      (window as any).onAndroidExportProgress(JSON.stringify({ sourceType: 'recorded', progress: 0.4, message: 'Rendering' }));
+      const dotDuring = {
+        visible: document.getElementById('save-dot')?.classList.contains('on'),
+        label: document.getElementById('save-label')?.textContent,
+      };
+      // A second trigger attempt must not double-export.
+      (window as any).maybeAutoExportOverlay();
+      (window as any).onAndroidExportComplete(JSON.stringify({ sourceType: 'recorded', uri: 'content://x', savedUri: 'content://y', displayName: 'overlay.mp4', durationMs: 20000 }));
+      return {
+        afterFinish,
+        total: exports.length,
+        payload: exports[0],
+        dotDuring,
+        dotAfter: document.getElementById('save-dot')?.classList.contains('on'),
+      };
+    });
+
+    expect(result.afterFinish).toBe(1);
+    expect(result.total).toBe(1); // no double trigger
+    expect(result.payload.sourceType).toBe('recorded');
+    expect(result.payload.segments).toHaveLength(1);
+    expect(result.dotDuring.visible).toBe(true);
+    expect(result.dotDuring.label).toContain('40%');
+    expect(result.dotAfter).toBe(false);
+  });
+
+  test('END MATCH while recording auto-saves after the final segment lands', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    });
+    await startMatch(page);
+    await page.waitForFunction(() => _camState === 'idle');
+
+    const result = await page.evaluate(async () => {
+      const exports: any[] = [];
+      let stopCalls = 0;
+      (window as any).AndroidVideo = {
+        exportOverlay(json: string) { exports.push(JSON.parse(json)); },
+        clearNativeRecordingPreview() {},
+        prepareNativeRecording() {},
+        startNativeRecording() {},
+        stopNativeRecording() {
+          stopCalls++;
+          setTimeout(() => {
+            (window as any).onAndroidRecordingStopped(JSON.stringify({
+              sourceType: 'recorded',
+              uri: 'content://recorded/final.mp4',
+              savedUri: 'content://recorded/final.mp4',
+              displayName: 'final.mp4',
+              durationMs: 30000,
+            }));
+          }, 0);
+        },
+      };
+      M.recordingStartBoutTs = 0;
+      _recBoutStart = 0;
+      _camState = 'recording';
+      _nativeRecordingActive = true;
+      (window as any).finishMatch();
+      const beforeSegment = exports.length;
+      await new Promise(resolve => setTimeout(resolve, 80));
+      return {
+        stopCalls,
+        beforeSegment,
+        total: exports.length,
+        sourceUri: exports[0]?.segments?.[0]?.uri,
+      };
+    });
+
+    expect(result.stopCalls).toBe(1);
+    expect(result.beforeSegment).toBe(0); // waits for the final segment
+    expect(result.total).toBe(1);
+    expect(result.sourceUri).toBe('content://recorded/final.mp4');
+  });
+
+  test('END MATCH in import mode auto-saves the imported overlay', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const exports: any[] = [];
+      (window as any).AndroidVideo = {
+        exportOverlay(json: string) { exports.push(JSON.parse(json)); },
+        closeVideoReview() {},
+        clearImportedPreview() {},
+        pauseImportedPreview() {},
+        playImportedPreview() {},
+      };
+      _nativeImportVideo = { uri: 'content://review/source.mp4', durationMs: 120000 };
+      _importVideoFile = { name: 'source.mp4', nativeUri: 'content://review/source.mp4' } as any;
+      (window as any).finishMatch();
+      return {
+        total: exports.length,
+        sourceType: exports[0]?.sourceType,
+        sourceUri: exports[0]?.sourceUri,
+        dotVisible: document.getElementById('save-dot')?.classList.contains('on'),
+      };
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.sourceType).toBe('imported');
+    expect(result.sourceUri).toBe('content://review/source.mp4');
+    expect(result.dotVisible).toBe(true);
+  });
+
   test('call stands records a review event in the timeline', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);
