@@ -598,7 +598,7 @@ const PIE_SECTORS = {
   [MENU_MAIN]: [
     {label:'OFFENSE', emoji:'⚔️', next:MENU_OFFENSE, color:'#16a34a', colorFill:'rgba(22,163,74,0.28)'},
     {label:'DEFENSE', emoji:'🛡️', next:MENU_DEF_ROW, color:'#dc2626', colorFill:'rgba(220,38,38,0.28)'},
-    {label:'NONE',    emoji:'⚖️', next:MENU_NONE,    color:'#2563eb', colorFill:'rgba(37,99,235,0.28)'},
+    {label:'OTHER',   emoji:'⚖️', next:MENU_NONE,    color:'#2563eb', colorFill:'rgba(37,99,235,0.28)'},
     {label:'CARD',    emoji:'🟨', next:MENU_CARD,    color:'#d97706', colorFill:'rgba(217,119,6,0.28)'},
   ],
   // offsets map as: base(100 or 200) + offset = actionId
@@ -897,7 +897,7 @@ const RADIAL_DEFS = {
     sectors:[
       {id:'OFF', label:'OFFENSE',  color:'#16a34a', dark:'#0a2612', branch:'OFFENSE'},
       {id:'DEF', label:'DEFENSE',  color:'#dc2626', dark:'#2a0707', branch:'DEF_ROW'},
-      {id:'NON', label:'NONE',     color:'#2563eb', dark:'#071029', branch:'NONE'},
+      {id:'NON', label:'OTHER',     color:'#2563eb', dark:'#071029', branch:'NONE'},
       {id:'CRD', label:'CARDS',    color:'#d97706', dark:'#1a0e02', branch:'CARD'},
     ]
   },
@@ -921,7 +921,7 @@ const RADIAL_DEFS = {
     ]
   },
   NONE: {
-    label:'NO ROW', color:'#2563eb', dark:'#071029',
+    label:'OTHER', color:'#2563eb', dark:'#071029',
     sectors:[
       {id:'CO', label:'Counterattk',offset:20},
       {id:'RE', label:'Remise',      offset:21},

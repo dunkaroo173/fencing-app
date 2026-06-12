@@ -1718,3 +1718,35 @@ test.describe('imported-video playback controls', () => {
   });
 });
 
+test.describe('radial menu OTHER sector label', () => {
+  test('MAIN sectors expose OTHER and not NONE for the no-right-of-way slot', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      const labels: string[] = RADIAL_DEFS.MAIN.sectors.map((s: any) => s.label);
+      return { labels };
+    });
+
+    expect(result.labels).toContain('OTHER');
+    expect(result.labels).not.toContain('NONE');
+  });
+
+  test('breadcrumb shows OTHER when drilling into the no-right-of-way branch', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).openPie('L');
+      (window as any)._radTransitionTo('NONE', true);
+      const top = document.getElementById('r-center-top')?.textContent ?? '';
+      (window as any).closePie('L', false);
+      return { top };
+    });
+
+    // Center top shows "<side> · <menu label>", e.g. "L · OTHER"
+    expect(result.top).toContain('OTHER');
+    expect(result.top).not.toContain('NONE');
+  });
+});
+
