@@ -84,6 +84,24 @@ Active development: `claude/optimize-fencing-app-voice-xXiuq`
 Main: `main`
 Remote: `dunkaroo173/fencing-app` (GitHub)
 
+## Android Rendering & Layering Contract (`ufl-android` + `android/`)
+
+Violating these rules has repeatedly produced "black screen" / "dead button" bugs. Check this list before touching anything that renders or overlays.
+
+**Native view stack** (MainActivity root FrameLayout, bottom → top):
+1. `NativeImportPreview` — SurfaceView, renders **below the window**, full alpha.
+2. `WebView` — `setBackgroundColor(TRANSPARENT)`; page opacity is controlled by CSS.
+3. Camera `PreviewView` — COMPATIBLE (TextureView) at alpha 0.30 **above** the WebView. Legacy pattern; do not replicate. (Follow-up: migrate to the SurfaceView-below pattern.)
+4. `NativeVideoReviewView` — opaque black, topmost. Must `hide()` on **every** error path (show() exception, onPlayerError) and the system back button must dismiss it.
+
+**Rules:**
+- Video surfaces must be SurfaceView-based. A transparent WebView reveals only below-window content — it does **not** composite sibling TextureViews beneath it.
+- `html` stays `background:transparent` **always** (it is the page canvas); `body` carries the app background; `body.android-native-preview` clears it. Any new full-viewport element needs a `body.android-native-preview` transparency override if video must show behind it.
+- System bars: immersive via `WindowInsetsControllerCompat` (re-applied in `onWindowFocusChanged`). targetSdk 35 enforces edge-to-edge; the legacy `windowFullscreen` theme flag is ignored there.
+- Full-screen web overlays that fade out (e.g. `#radial-overlay`) must set `pointer-events:none` the moment they start fading — `display:flex` at `opacity:0` still swallows taps.
+- User-facing statuses: `setOverlayStatus` lives in the drawer and also toasts via the hint pill when the drawer is closed. Never report a failure only into a closed drawer.
+- z-index map under `body.android-native-preview`: dim layer 1 · cards 5 · rec/cam 10 · import strip 11 · chrome (buttons/HUD) 12 · radial 13 · confirm 30 · drawer 50/51 · portrait overlay 9999 (pointer-events:none).
+
 ## Development Notes
 - Never commit secrets or wallet private keys
 - `elo.ts` is zero-dependency pure TypeScript — keep it that way

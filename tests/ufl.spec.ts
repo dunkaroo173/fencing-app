@@ -1367,6 +1367,75 @@ test.describe('native video review', () => {
     expect(result.runningAfterKeep).toBe(true);    // and resumes on CALL STANDS
   });
 
+  test('status messages surface as a toast when the drawer is closed', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      // No source, no events: tapping the review button reports a status.
+      (window as any).startVideoReviewForIndex();
+      const toast = {
+        text: document.getElementById('hint-pill')?.textContent,
+        visible: document.getElementById('hint-pill')?.classList.contains('on'),
+      };
+      // With the drawer open the message stays in the drawer status line.
+      (window as any).openDrawer();
+      document.getElementById('hint-pill')?.classList.remove('on');
+      (window as any).setOverlayStatus('Drawer-only message.', false);
+      const whileDrawerOpen = document.getElementById('hint-pill')?.classList.contains('on');
+      (window as any).closeDrawer();
+      return { toast, whileDrawerOpen, drawerStatus: document.getElementById('overlay-status')?.textContent };
+    });
+
+    expect(result.toast.visible).toBe(true);
+    expect(result.toast.text).toContain('No action available');
+    expect(result.whileDrawerOpen).toBe(false);
+    expect(result.drawerStatus).toBe('Drawer-only message.');
+  });
+
+  test('a closing radial overlay cannot swallow taps', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).openPie('L');
+      const openState = document.getElementById('radial-overlay')?.style.pointerEvents;
+      (window as any).closePie('L', false);
+      const ov = document.getElementById('radial-overlay');
+      return {
+        openState,
+        closingPointerEvents: ov?.style.pointerEvents,
+        stillDisplayed: ov?.style.display, // flex during the 220ms fade
+      };
+    });
+
+    expect(result.openState).toBe('');
+    expect(result.closingPointerEvents).toBe('none');
+    expect(result.stillDisplayed).toBe('flex');
+  });
+
+  test('the drawer review button shows while the recording is still rolling', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    const result = await page.evaluate(() => {
+      (window as any).AndroidVideo = { exportOverlay() {}, startVideoReview() {} };
+      M.events = [
+        { ts: 8, period: 1, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true },
+      ];
+      _camState = 'recording';
+      _nativeRecordingActive = true;
+      (window as any).openDrawer();
+      const display = document.getElementById('video-review')?.style.display;
+      (window as any).closeDrawer();
+      _camState = 'idle';
+      _nativeRecordingActive = false;
+      return { display };
+    });
+
+    expect(result.display).toBe('inline-block');
+  });
+
   test('a review decision returns to the match even with other pending reviews', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);

@@ -92,8 +92,9 @@ body.android-native-preview .rec-dot,
 body.android-native-preview .act-btn,
 body.android-native-preview .sec-btn,
 body.android-native-preview .mid-btn,
-body.android-native-preview .confirm-wrap,
-body.android-native-preview #radial-overlay{z-index:12}
+body.android-native-preview .confirm-wrap{z-index:12}
+/* The radial must sit above the boosted chrome while open. */
+body.android-native-preview #radial-overlay{z-index:13}
 body.android-native-preview .act-left{background:rgba(0,84,105,0.98);box-shadow:0 14px 34px rgba(0,0,0,0.80),0 0 0 4px rgba(0,199,255,0.78)}
 body.android-native-preview .act-right{background:rgba(112,25,10,0.98);box-shadow:0 14px 34px rgba(0,0,0,0.80),0 0 0 4px rgba(230,38,0,0.78)}
 body.android-native-preview .sec-btn{background:rgba(0,0,0,0.96);box-shadow:0 12px 26px rgba(0,0,0,0.78),0 0 0 2px rgba(255,255,255,0.20)}
@@ -1138,6 +1139,7 @@ function openPie(side){
   hideOverturnChooser();
   _radSide=side; _radPhase='main'; _radStack=[]; _radHov=null; _radEls=[]; _radMenu=null;
   const ov=document.getElementById('radial-overlay');
+  ov.style.pointerEvents='';
   ov.style.display='flex'; ov.style.opacity='0';
   requestAnimationFrame(()=>requestAnimationFrame(()=>ov.style.opacity='1'));
   _rTrack1.setAttribute('opacity','0'); _rTrack2.setAttribute('opacity','0');
@@ -1153,6 +1155,9 @@ function closePie(side, resume = true){
   _radPhase='idle'; _radHov=null; _radStack=[]; _radMenu=null; _radSide=null; _radEls=[];
   const ov=document.getElementById('radial-overlay');
   ov.style.opacity='0';
+  // The overlay keeps display:flex for the 220ms fade - without this it
+  // invisibly swallows taps on the buttons underneath.
+  ov.style.pointerEvents='none';
   setTimeout(()=>{
     ov.style.display='none';
     while(_rSlicesG.firstChild)_rSlicesG.removeChild(_rSlicesG.firstChild);
@@ -2739,6 +2744,9 @@ function blobChunkToBase64(blob) {
   });
 }
 
+let _statusToastTimer = null;
+let _lastStatusToast = '';
+
 function setOverlayStatus(msg, busy) {
   const status = document.getElementById('overlay-status');
   const importBtn = document.getElementById('imp-video');
@@ -2751,6 +2759,18 @@ function setOverlayStatus(msg, busy) {
     exportBtn.disabled = !!busy;
     exportBtn.textContent = busy ? 'Rendering…' : '⬇ Export Overlay';
   }
+  // #overlay-status lives inside the drawer: when the drawer is closed, a
+  // message there is invisible and a tap appears to do nothing. Surface it
+  // as a toast on the match screen too.
+  if (msg && !document.getElementById('drawer').classList.contains('on') && msg !== _lastStatusToast) {
+    _lastStatusToast = msg;
+    const pill = document.getElementById('hint-pill');
+    pill.textContent = msg;
+    pill.classList.add('on');
+    clearTimeout(_statusToastTimer);
+    _statusToastTimer = setTimeout(() => pill.classList.remove('on'), 2800);
+  }
+  if (!msg) _lastStatusToast = '';
 }
 
 function videoDimensions(video) {
@@ -3483,7 +3503,9 @@ function openDrawer() {
   buildReport();
   document.getElementById('exp-video').style.display = (_recBlob || _nativeRecordedPayload) ? 'inline-block' : 'none';
   document.getElementById('exp-overlay').style.display = _importVideoFile ? 'inline-block' : 'none';
-  document.getElementById('video-review').style.display = (M && M.events && M.events.length && videoReviewSource()) ? 'inline-block' : 'none';
+  // Show whenever a reviewable action exists: source resolution happens at
+  // tap time (and stops an active recording if the footage is still rolling).
+  document.getElementById('video-review').style.display = (M && latestReviewableEventIndex() >= 0) ? 'inline-block' : 'none';
   document.getElementById('drawer').classList.add('on');
   document.getElementById('drawer-backdrop').classList.add('on');
 }
