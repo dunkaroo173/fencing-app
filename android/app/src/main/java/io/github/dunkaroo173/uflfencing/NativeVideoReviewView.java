@@ -61,6 +61,8 @@ class NativeVideoReviewView extends FrameLayout {
     private final Button speed025Button;
     private final Button speed05Button;
     private final Button speed1Button;
+    private final Button editButton;
+    private final Button keepButton;
     private final LinearLayout advancedControls;
     private final LinearLayout topPanel;
 
@@ -181,16 +183,16 @@ class NativeVideoReviewView extends FrameLayout {
         speed05Button = button(context, "0.5x");
         speed1Button = button(context, "1x");
         moreButton = button(context, "SEEK +", Color.rgb(70, 78, 96));
-        Button edit = button(context, "OVERTURN", Color.rgb(245, 156, 66));
-        Button keep = button(context, "CALL STANDS", Color.rgb(36, 190, 118));
+        editButton = button(context, "OVERTURN", Color.rgb(245, 156, 66));
+        keepButton = button(context, "CALL STANDS", Color.rgb(36, 190, 118));
         primaryControls.addView(replay);
         primaryControls.addView(playButton);
         primaryControls.addView(speed025Button);
         primaryControls.addView(speed05Button);
         primaryControls.addView(speed1Button);
         primaryControls.addView(moreButton);
-        primaryControls.addView(edit);
-        primaryControls.addView(keep);
+        primaryControls.addView(editButton);
+        primaryControls.addView(keepButton);
         bottom.addView(primaryControls);
 
         advancedControls = new LinearLayout(context);
@@ -259,10 +261,10 @@ class NativeVideoReviewView extends FrameLayout {
         next.setOnClickListener(v -> {
             if (callback != null) callback.onNavigate(eventId, eventIndex, 1);
         });
-        keep.setOnClickListener(v -> {
+        keepButton.setOnClickListener(v -> {
             if (callback != null) callback.onKeep(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
         });
-        edit.setOnClickListener(v -> {
+        editButton.setOnClickListener(v -> {
             if (callback != null) callback.onEdit(eventId, eventIndex, currentSec(), clipStartSec, clipEndSec, playbackRate);
         });
     }
@@ -284,8 +286,11 @@ class NativeVideoReviewView extends FrameLayout {
             clipEndSec = Math.max(clipStartSec + 0.5, clipEndSec);
             playbackRate = payload.optDouble("playbackRate", 0.5);
             boolean showReviewOverlay = payload.optBoolean("showReviewOverlay", false);
+            boolean playbackOnly = payload.optBoolean("playbackOnly", false);
             scoreStrip.setVisibility(showReviewOverlay ? VISIBLE : GONE);
             actionCard.setVisibility(showReviewOverlay ? VISIBLE : GONE);
+            editButton.setVisibility(playbackOnly ? GONE : VISIBLE);
+            keepButton.setText(playbackOnly ? "CLOSE" : "CALL STANDS");
             topPanel.setVisibility(payload.optString("progressText", "").isEmpty() ? GONE : VISIBLE);
 
             applyReviewContext(payload);

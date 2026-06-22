@@ -514,6 +514,67 @@ test.describe('overlay video export', () => {
 });
 
 test.describe('native video review', () => {
+  test('android library stores saved overlay video and opens playback', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page);
+
+    await page.evaluate(() => {
+      M.scoreL = 2;
+      M.scoreR = 1;
+      M.finished = true;
+      M.timerSec = Math.max(0, M.timerSec - 12);
+      M.events.push(
+        { ts: 2, side: 'L', actionId: 100, label: 'Simple Attack', emoji: 'A', isHit: true, period: 1, piste: null },
+        { ts: 5, side: 'R', actionId: 240, label: 'Off-Target', emoji: 'O', isHit: false, period: 1, piste: null },
+        { ts: 8, side: 'R', actionId: 290, label: 'Yellow Card', emoji: 'Y', isHit: false, period: 1, piste: null },
+      );
+      M.cardsR.push('Y');
+      (window as any).onAndroidExportComplete(JSON.stringify({
+        sourceType: 'recorded',
+        uri: 'content://exports/share.mp4',
+        savedUri: 'content://media/external/video/media/42',
+        displayName: 'LEFT-vs-RIGHT-overlay.mp4',
+        durationMs: 45000,
+      }));
+    });
+    await page.waitForTimeout(250);
+    await page.reload();
+
+    const payload = await page.evaluate(() => {
+      (window as any).__playbackPayload = null;
+      (window as any).AndroidVideo = {
+        startVideoReview(json: string) { (window as any).__playbackPayload = JSON.parse(json); },
+        closeVideoReview() {},
+      };
+      return null;
+    });
+    expect(payload).toBeNull();
+
+    await page.locator('#btn-library').tap();
+    await expect(page.locator('#s-library.active')).toBeVisible();
+    await expect(page.locator('.lib-row')).toHaveCount(1);
+    await expect(page.locator('.lib-row-names').first()).toContainText('LEFT');
+    await expect(page.locator('.lib-video').first()).toHaveText('PLAY VIDEO');
+    await expect(page.locator('.lib-row-stat.left').first()).toContainText('2 pts · 1 hit · 0 cards · 0 off targets');
+    await expect(page.locator('.lib-row-stat.right').first()).toContainText('1 pt · 0 hits · 1 card · 1 off target');
+    await expect(page.locator('.lib-row-highlight').first()).toContainText('Duration 0:12');
+    await expect(page.locator('.lib-row-highlight').first()).toContainText('Top Simple Attack x1 / Off-Target x1');
+
+    const savedStats = await page.evaluate(() => JSON.parse(localStorage.getItem('ufl:index') || '[]')[0].stats);
+    expect(savedStats.left.hits).toBe(1);
+    expect(savedStats.right.cards).toBe(1);
+    expect(savedStats.right.offTarget).toBe(1);
+
+    await page.locator('.lib-video').first().tap();
+    const playback = await page.evaluate(() => (window as any).__playbackPayload);
+    expect(playback.sourceType).toBe('library');
+    expect(playback.sourceUri).toBe('content://media/external/video/media/42');
+    expect(playback.playbackOnly).toBe(true);
+    expect(playback.durationSec).toBe(45);
+    expect(playback.match.scoreL).toBe(2);
+    expect(playback.match.scoreR).toBe(1);
+  });
+
   test('opens latest pending action with a native review payload around the event timestamp', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);
@@ -803,10 +864,12 @@ test.describe('native video review', () => {
 
     const result = await page.evaluate(async () => {
       const reviewPayloads: any[] = [];
+      const exports: any[] = [];
       let stopped = false;
       let prepared = false;
       let restarted = false;
       (window as any).AndroidVideo = {
+        exportOverlay(json: string) { exports.push(JSON.parse(json)); },
         prepareNativeRecording() {
           prepared = true;
           setTimeout(() => (window as any).onAndroidRecordingReady(), 0);
@@ -833,15 +896,17 @@ test.describe('native video review', () => {
         startVideoReview(json: string) { reviewPayloads.push(JSON.parse(json)); },
       };
       M.events = [
+        { ts: 4, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true, reviewed: true },
         { ts: 8, period: 1, side: 'R', actionId: 200, label: 'Simple Attack', emoji: 'A', isHit: true },
       ];
+      (window as any).recomputeMatchScoreFromEvents();
       M.recordingStartBoutTs = 0;
       _camState = 'recording';
       _nativeRecordingActive = true;
-      const launched = (window as any).startVideoReviewForIndex(0);
+      const launched = (window as any).startVideoReviewForIndex(1);
       await new Promise(resolve => setTimeout(resolve, 50));
       (window as any).onAndroidVideoReviewEdit(JSON.stringify({
-        eventIndex: 0,
+        eventIndex: 1,
         chosenTime: 8.1,
         clipStart: 3,
         clipEnd: 10,
@@ -868,10 +933,14 @@ test.describe('native video review', () => {
         prepared,
         restarted,
         reviewPayloads,
+        exports,
         camState: _camState,
         recordingActive: _nativeRecordingActive,
+        recordingStartBoutTs: M.recordingStartBoutTs,
+        scoreL: M.scoreL,
+        scoreR: M.scoreR,
         running,
-        corrected: M.events[0],
+        corrected: M.events[1],
         restartPauses: M.recordingPauses,
       };
     });
@@ -882,12 +951,14 @@ test.describe('native video review', () => {
     expect(result.restarted).toBe(true);
     expect(result.camState).toBe('recording');
     expect(result.recordingActive).toBe(true);
+    expect(result.exports).toHaveLength(0);
+    expect(result.recordingStartBoutTs).toBe(0);
     // Only the initial review payload: correcting the last pending action no
     // longer re-opens the review (it would loop with nothing left to review).
     expect(result.reviewPayloads).toHaveLength(1);
     expect(result.reviewPayloads[0].sourceType).toBe('recorded');
     expect(result.reviewPayloads[0].sourceUri).toBe('content://recorded/review.mp4');
-    expect(result.reviewPayloads[0].eventIndex).toBe(0);
+    expect(result.reviewPayloads[0].eventIndex).toBe(1);
     // Correcting the last pending action resumes the bout clock.
     expect(result.running).toBe(true);
     // The restarted recording ran under a parked clock until the correction
@@ -896,6 +967,8 @@ test.describe('native video review', () => {
     expect(result.restartPauses).toHaveLength(1);
     expect(result.restartPauses[0].startVideo).toBe(0);
     expect(result.restartPauses[0].endVideo).toBeGreaterThan(0);
+    expect(result.scoreL).toBe(1);
+    expect(result.scoreR).toBe(1);
     expect(result.corrected.side).toBe('L');
     expect(result.corrected.actionId).toBe(103);
   });
@@ -1872,4 +1945,3 @@ test.describe('radial menu OTHER sector label', () => {
     expect(result.top).not.toContain('NONE');
   });
 });
-

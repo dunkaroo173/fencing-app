@@ -65,6 +65,33 @@ body.android-native-preview .app-root{background:transparent}
 .rnd-grey{background:#444;color:#fff}
 .rnd-blue{background:#0a39d4;color:#fff}
 
+/* ── LIBRARY ── */
+#s-library{background:var(--bg);padding:14px;gap:12px}
+.lib-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lib-title{font-family:var(--head);font-size:18px;font-weight:800;color:#fff;letter-spacing:1px}
+.lib-actions{display:flex;gap:8px}
+.lib-small{padding:9px 12px;border-radius:6px;background:var(--s2);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text);text-transform:uppercase}
+.lib-list{flex:1;overflow:auto;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0}
+.lib-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.lib-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 6px;border-bottom:1px solid var(--s2)}
+.lib-row-main{min-width:0}
+.lib-row-names{font-family:var(--head);font-size:15px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-row-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase}
+.lib-row-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:7px;font-family:var(--mono);font-size:10px;color:var(--text);text-transform:uppercase}
+.lib-row-stat{border:1px solid var(--border);border-radius:5px;background:rgba(255,255,255,0.035);padding:5px 6px;line-height:1.35}
+.lib-row-stat b{font-family:var(--head);font-size:11px;color:#fff}
+.lib-row-stat.left{border-color:rgba(0,199,255,0.35)}
+.lib-row-stat.right{border-color:rgba(230,38,0,0.35)}
+.lib-row-highlight{margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase}
+.lib-status{border:1px solid var(--border);border-radius:3px;padding:1px 5px}
+.lib-status.finished{color:var(--green);border-color:rgba(61,232,122,0.35)}
+.lib-status.live{color:var(--gold);border-color:rgba(245,200,66,0.35)}
+.lib-row-actions{display:flex;gap:6px;align-items:center}
+.lib-load,.lib-video,.lib-del{padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-family:var(--mono);font-size:10px;text-transform:uppercase;color:#fff;background:var(--s2)}
+.lib-video{background:#0a39d4;border-color:#315ceb}
+.lib-video:disabled{opacity:.35;background:var(--s2);border-color:var(--border)}
+.lib-del{background:#27100c;border-color:rgba(230,38,0,0.5);color:#ffb4a8}
+
 /* ── SCREEN 1: MATCH ── */
 #s-match{background:var(--bg)}
 body.android-native-preview #s-match{background:transparent}
@@ -307,6 +334,7 @@ body.android-native-preview #import-preview{display:none!important}
     <div class="setup-btns">
       <button class="rnd rnd-start" id="btn-start">▶ START MATCH</button>
       <button class="rnd rnd-end" id="btn-import-video">⬆ IMPORT VIDEO</button>
+      <button class="rnd rnd-end" id="btn-library">▶ BOUT LIBRARY</button>
       <button class="rnd rnd-end" id="btn-load">⬆ LOAD JSON</button>
       <input type="file" id="file-input" accept=".json" style="display:none">
     </div>
@@ -317,6 +345,21 @@ body.android-native-preview #import-preview{display:none!important}
     <input class="setup-name-input" id="name-r" type="text" maxlength="18" placeholder="RIGHT FENCER" autocomplete="off" spellcheck="false">
     <div class="setup-side-tag">RIGHT</div>
   </div>
+</div>
+
+<!-- ── SCREEN 0B: BOUT LIBRARY ── -->
+<div id="s-library" class="screen">
+  <div class="lib-topbar">
+    <div>
+      <div class="lib-title">BOUT LIBRARY</div>
+      <div class="setup-video-status" style="text-align:left;margin-top:2px">Saved matches and local overlay videos</div>
+    </div>
+    <div class="lib-actions">
+      <button class="lib-small" id="lib-back">← Back</button>
+      <button class="lib-small" id="lib-clear">Clear All</button>
+    </div>
+  </div>
+  <div class="lib-list" id="lib-list"></div>
 </div>
 
 <!-- ── SCREEN 1: MATCH ── -->
@@ -648,8 +691,176 @@ const PIE_SECTORS = {
 let M = null;
 let PS = {left:null, right:null}; // pending pie selection {menuType, side}
 
+const STORE_INDEX_KEY = 'ufl:index';
+const STORE_CLIENT_KEY = 'ufl:clientId';
+const STORE_MATCH_PREFIX = 'ufl:match:';
+let _saveTimer = null;
+let _libraryPlaybackMode = false;
+
+function uuid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+function clientId() {
+  let id = localStorage.getItem(STORE_CLIENT_KEY);
+  if (!id) {
+    id = uuid();
+    localStorage.setItem(STORE_CLIENT_KEY, id);
+  }
+  return id;
+}
+
+function readIndex() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORE_INDEX_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeIndex(index) {
+  localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(index));
+}
+
+function ensureMatchIdentity(match) {
+  if (!match) return null;
+  if (!match.matchId) match.matchId = uuid();
+  if (!match.clientId) match.clientId = clientId();
+  if (!match.createdAt) match.createdAt = Date.now();
+  return match.matchId;
+}
+
+function matchVideo(match) {
+  return match && match.overlayVideo && (match.overlayVideo.savedUri || match.overlayVideo.uri)
+    ? match.overlayVideo
+    : null;
+}
+
+function plural(value, singular, pluralText) {
+  return `${Number(value) || 0} ${Number(value) === 1 ? singular : (pluralText || singular + 's')}`;
+}
+
+function periodElapsedSec(match) {
+  if (!match) return 0;
+  const periodDuration = Math.max(0, Number(match.periodDuration) || 0);
+  const period = Math.max(1, Number(match.period) || 1);
+  const timerSec = Math.max(0, Number(match.timerSec) || 0);
+  const currentPeriodElapsed = periodDuration ? Math.max(0, periodDuration - timerSec) : 0;
+  return Math.max(0, ((period - 1) * periodDuration) + currentPeriodElapsed);
+}
+
+function computeSideProfile(match, side) {
+  const events = Array.isArray(match && match.events) ? match.events : [];
+  const sideEvents = events.filter(ev => ev && ev.side === side);
+  const cardIds = side === 'L' ? [190, 191] : [290, 291];
+  const offTargetIds = side === 'L' ? [140] : [240];
+  const cardEvents = sideEvents.filter(ev => cardIds.includes(Number(ev.actionId)));
+  const actionEvents = sideEvents.filter(ev => !cardIds.includes(Number(ev.actionId)));
+  const actionCounts = {};
+  actionEvents.forEach(ev => {
+    const label = ev.label || (ACTIONS[ev.actionId] && ACTIONS[ev.actionId].label) || 'Action';
+    actionCounts[label] = (actionCounts[label] || 0) + 1;
+  });
+  const topAction = Object.entries(actionCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  const cards = side === 'L'
+    ? Math.max((match.cardsL || []).length, cardEvents.length)
+    : Math.max((match.cardsR || []).length, cardEvents.length);
+  return {
+    side,
+    name: side === 'L' ? (match.nameL || 'LEFT') : (match.nameR || 'RIGHT'),
+    points: Number(side === 'L' ? match.scoreL : match.scoreR) || 0,
+    hits: sideEvents.filter(ev => ev && ev.isHit).length,
+    cards,
+    offTarget: sideEvents.filter(ev => offTargetIds.includes(Number(ev.actionId))).length,
+    actions: actionEvents.length,
+    topAction: topAction ? { label: topAction[0], count: topAction[1] } : null,
+  };
+}
+
+function computeMatchStats(match) {
+  const events = Array.isArray(match && match.events) ? match.events : [];
+  return {
+    version: 1,
+    eventCount: events.length,
+    durationSec: periodElapsedSec(match),
+    reviewCount: events.filter(ev => ev && Number(ev.actionId) === 3).length,
+    left: computeSideProfile(match || {}, 'L'),
+    right: computeSideProfile(match || {}, 'R'),
+  };
+}
+
+function matchMeta(match, stats) {
+  const id = ensureMatchIdentity(match);
+  const video = matchVideo(match);
+  const summary = stats || computeMatchStats(match);
+  return {
+    id,
+    nameL: match.nameL || 'LEFT',
+    nameR: match.nameR || 'RIGHT',
+    scoreL: Number(match.scoreL) || 0,
+    scoreR: Number(match.scoreR) || 0,
+    finished: !!match.finished,
+    weapon: match.weapon || 'foil',
+    eventCount: summary.eventCount,
+    stats: summary,
+    createdAt: Number(match.createdAt) || Date.now(),
+    updatedAt: Date.now(),
+    hasVideo: !!video,
+    videoSavedUri: video ? (video.savedUri || video.uri) : null,
+    videoDisplayName: video ? (video.displayName || 'overlay.mp4') : null,
+  };
+}
+
+function persistMatchNow() {
+  if (!M) return;
+  const id = ensureMatchIdentity(M);
+  M.updatedAt = Date.now();
+  M.stats = computeMatchStats(M);
+  localStorage.setItem(STORE_MATCH_PREFIX + id, JSON.stringify(M));
+  const meta = matchMeta(M, M.stats);
+  const rest = readIndex().filter(row => row && row.id !== id);
+  writeIndex([meta, ...rest].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+}
+
+function scheduleSave() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    persistMatchNow();
+  }, 120);
+}
+
+function loadStoredMatch(id) {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_MATCH_PREFIX + id) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+function deleteStoredMatch(id) {
+  localStorage.removeItem(STORE_MATCH_PREFIX + id);
+  writeIndex(readIndex().filter(row => row && row.id !== id));
+}
+
+function clearStoredMatches() {
+  readIndex().forEach(row => {
+    if (row && row.id) localStorage.removeItem(STORE_MATCH_PREFIX + row.id);
+  });
+  writeIndex([]);
+}
+
 function newMatchState(cfg) {
   return {
+    matchId: uuid(),
+    clientId: clientId(),
     nameL: cfg.nameL || 'LEFT',
     nameR: cfg.nameR || 'RIGHT',
     weapon: cfg.weapon || 'foil',
@@ -669,6 +880,9 @@ function newMatchState(cfg) {
     recordingStartPeriodTs: null,
     recordingPauses: [],
     recordingSegments: [],
+    overlayVideo: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
     startTime: null,
     elapsedMs: 0,
   };
@@ -757,6 +971,7 @@ function finishMatch() {
   stopTimer();
   const stoppingRecording = stopActiveRecording({ autoStop: true });
   M.finished = true;
+  scheduleSave();
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
   document.getElementById('res-resume').style.display = 'none';
@@ -794,6 +1009,7 @@ async function clickStart() {
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
   M = newMatchState({ nameL, nameR, ...CFG });
   _autoExportDone = false;
+  scheduleSave();
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
   document.getElementById('hud-name-r').textContent = nameR;
@@ -897,6 +1113,7 @@ document.getElementById('res-new').addEventListener('touchend', e => {
   _recBlob = null;
   _recDurationSec = 0;
   _nativeRecordedVideo = null;
+  _nativeRecordedPayload = null;
   M = null;
   document.getElementById('fab-btn').style.display = 'none';
   showScreen('s-setup');
@@ -905,6 +1122,143 @@ document.getElementById('res-new').addEventListener('touchend', e => {
 document.getElementById('ev-back').addEventListener('touchend', e => {
   e.preventDefault();
   showScreen(M && M.finished ? 's-result' : 's-match');
+}, {passive:false});
+
+function fmtLibraryDate(ts) {
+  if (!ts) return 'Unknown date';
+  try {
+    return new Date(Number(ts)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch (_) {
+    return 'Unknown date';
+  }
+}
+
+function renderLibrary() {
+  const list = document.getElementById('lib-list');
+  const rows = readIndex();
+  if (!rows.length) {
+    list.innerHTML = '<div class="lib-empty">No saved bouts yet</div>';
+    return;
+  }
+  list.innerHTML = rows.map(row => {
+    const status = row.finished ? 'finished' : 'live';
+    const videoLabel = row.hasVideo ? 'PLAY VIDEO' : 'NO VIDEO';
+    const stats = row.stats || {};
+    const left = stats.left || { name: row.nameL || 'LEFT', points: row.scoreL || 0, hits: 0, cards: 0, offTarget: 0, actions: 0 };
+    const right = stats.right || { name: row.nameR || 'RIGHT', points: row.scoreR || 0, hits: 0, cards: 0, offTarget: 0, actions: 0 };
+    const duration = Number(stats.durationSec) ? fmtTime(stats.durationSec) : null;
+    const topLeft = left.topAction ? `${left.topAction.label} x${left.topAction.count}` : null;
+    const topRight = right.topAction ? `${right.topAction.label} x${right.topAction.count}` : null;
+    return `<div class="lib-row" data-id="${row.id}">
+      <div class="lib-row-main">
+        <div class="lib-row-names">${row.nameL || 'LEFT'} vs ${row.nameR || 'RIGHT'}</div>
+        <div class="lib-row-meta">
+          <span>${Number(row.scoreL) || 0}-${Number(row.scoreR) || 0}</span>
+          <span>${String(row.weapon || 'foil').toUpperCase()}</span>
+          <span>${Number(row.eventCount) || 0} events</span>
+          <span>${fmtLibraryDate(row.updatedAt || row.createdAt)}</span>
+          <span class="lib-status ${status}">${status}</span>
+          ${row.hasVideo ? '<span class="lib-status finished">video saved</span>' : ''}
+        </div>
+        <div class="lib-row-stats">
+          <div class="lib-row-stat left"><b>${left.name || row.nameL || 'LEFT'}</b><br>${plural(left.points, 'pt')} · ${plural(left.hits, 'hit')} · ${plural(left.cards, 'card')} · ${plural(left.offTarget, 'off target')}</div>
+          <div class="lib-row-stat right"><b>${right.name || row.nameR || 'RIGHT'}</b><br>${plural(right.points, 'pt')} · ${plural(right.hits, 'hit')} · ${plural(right.cards, 'card')} · ${plural(right.offTarget, 'off target')}</div>
+        </div>
+        <div class="lib-row-highlight">
+          ${duration ? `<span>Duration ${duration}</span>` : ''}
+          ${Number(stats.reviewCount) ? `<span> · Reviews ${Number(stats.reviewCount)}</span>` : ''}
+          ${topLeft || topRight ? `<span> · Top ${topLeft || '-'} / ${topRight || '-'}</span>` : ''}
+        </div>
+      </div>
+      <div class="lib-row-actions">
+        <button class="lib-load" data-id="${row.id}">LOAD</button>
+        <button class="lib-video" data-id="${row.id}" ${row.hasVideo ? '' : 'disabled'}>${videoLabel}</button>
+        <button class="lib-del" data-id="${row.id}">DELETE</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openLibrary() {
+  persistMatchNow();
+  renderLibrary();
+  showScreen('s-library');
+}
+
+function loadLibraryMatch(id) {
+  const match = loadStoredMatch(id);
+  if (!match) {
+    renderLibrary();
+    return;
+  }
+  M = match;
+  refreshHUD();
+  document.getElementById('hud-name-l').textContent = M.nameL;
+  document.getElementById('hud-name-r').textContent = M.nameR;
+  document.getElementById('fab-btn').style.display = 'flex';
+  const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
+  showResultScreen(M.finished ? (winner === 'DRAW' ? 'DRAW' : winner + ' WINS!') : 'MATCH PAUSED');
+}
+
+function playLibraryVideo(id) {
+  const match = loadStoredMatch(id);
+  const video = matchVideo(match);
+  const uri = video && (video.savedUri || video.uri);
+  if (!match || !uri || !isAndroidVideoReviewAvailable()) {
+    setOverlayStatus('Saved video is not available on this device.', false);
+    return;
+  }
+  _libraryPlaybackMode = true;
+  M = match;
+  const durationSec = Math.max(0, Number(video.durationMs || 0) / 1000);
+  const reviewable = Array.isArray(match.events) ? match.events.filter(ev => ev && (ev.side === 'L' || ev.side === 'R')) : [];
+  const eventIndex = reviewable.length ? match.events.indexOf(reviewable[reviewable.length - 1]) : -1;
+  AndroidVideo.startVideoReview(JSON.stringify({
+    sourceUri: uri,
+    sourceType: 'library',
+    eventIndex,
+    eventVideoTime: 0,
+    clipStart: 0,
+    clipEnd: durationSec > 0 ? durationSec : 3600,
+    durationSec,
+    playbackRate: 1,
+    showReviewOverlay: false,
+    playbackOnly: true,
+    match,
+    title: `${match.nameL || 'LEFT'} vs ${match.nameR || 'RIGHT'}`,
+  }));
+}
+
+document.getElementById('btn-library').addEventListener('touchend', e => {
+  e.preventDefault();
+  openLibrary();
+}, {passive:false});
+
+document.getElementById('lib-back').addEventListener('touchend', e => {
+  e.preventDefault();
+  showScreen('s-setup');
+}, {passive:false});
+
+document.getElementById('lib-clear').addEventListener('touchend', e => {
+  e.preventDefault();
+  if (!confirm('Clear all saved bouts from this device?')) return;
+  clearStoredMatches();
+  renderLibrary();
+}, {passive:false});
+
+document.getElementById('lib-list').addEventListener('touchend', e => {
+  const button = e.target.closest('button');
+  if (!button) return;
+  e.preventDefault();
+  const id = button.dataset.id;
+  if (!id) return;
+  if (button.classList.contains('lib-load')) loadLibraryMatch(id);
+  if (button.classList.contains('lib-video')) playLibraryVideo(id);
+  if (button.classList.contains('lib-del')) {
+    if (!confirm('Delete this bout from the library?')) return;
+    deleteStoredMatch(id);
+    renderLibrary();
+  }
 }, {passive:false});
 
 // ── SVG Radial menu ───────────────────────────────────────────────────────────
@@ -2348,9 +2702,11 @@ function markRecordingStart(boutElapsed) {
   _nativeRecordedPayload = null;
   if (M) {
     if (!Array.isArray(M.recordingSegments)) M.recordingSegments = [];
-    M.recordingStartBoutTs = _recBoutStart;
-    M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
-    M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
+    if (M.recordingStartBoutTs === null || M.recordingStartBoutTs === undefined || M.recordingSegments.length === 0) {
+      M.recordingStartBoutTs = _recBoutStart;
+      M.recordingStartPeriod = Math.max(1, Number(M.period) || 1);
+      M.recordingStartPeriodTs = _recBoutStart - (M.recordingStartPeriod - 1) * (Number(M.periodDuration) || 0);
+    }
     M.recordingPauses = [];
     if (!M.running) {
       // The camera is rolling but the clock is parked (start countdown, or a
@@ -2655,7 +3011,7 @@ async function toggleCamera() {
           });
         return;
       }
-      if (shouldExportNow) exportVideo();
+      if (shouldExportNow && M && M.finished) exportVideo();
       maybeAutoExportOverlay();
     };
     markRecordingStart();
@@ -3338,6 +3694,18 @@ window.onAndroidExportComplete = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
   _isRenderingOverlay = false;
   hideSaveDot();
+  if (M && (payload.savedUri || payload.uri)) {
+    M.overlayVideo = {
+      sourceType: payload.sourceType || 'recorded',
+      uri: payload.uri || payload.savedUri,
+      savedUri: payload.savedUri || payload.uri,
+      displayName: payload.displayName || 'overlay.mp4',
+      durationMs: Math.max(0, Number(payload.durationMs || 0)),
+      savedAt: Date.now(),
+    };
+    scheduleSave();
+    if (document.getElementById('s-library').classList.contains('active')) renderLibrary();
+  }
   if (payload.savedUri) {
     setOverlayStatus(`Video saved to Photos/DCIM/UFL Fencing as ${payload.displayName || 'overlay.mp4'}.`, false);
     return;
@@ -3392,7 +3760,7 @@ window.onAndroidRecordingStopped = function(payloadJson) {
     return;
   }
   setOverlayStatus('Recording segment ready.', false);
-  if (shouldExportNow) exportVideo();
+  if (shouldExportNow && M && M.finished) exportVideo();
   // Match already ended (END MATCH stopped this recording): the final segment
   // is stored now, so the auto-save can run against complete footage.
   maybeAutoExportOverlay();
@@ -3425,6 +3793,14 @@ window.onAndroidRecordingStateSync = function(nativeRecording) {
 
 window.onAndroidVideoReviewKeep = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  if (_libraryPlaybackMode) {
+    _libraryPlaybackMode = false;
+    try {
+      if (window.AndroidVideo && typeof AndroidVideo.closeVideoReview === 'function') AndroidVideo.closeVideoReview();
+    } catch (_) {}
+    openLibrary();
+    return;
+  }
   if (!markReviewDecision(payload, 'confirmed')) return;
   recordReviewOutcomeEvent(M.events[resolveReviewEventIndex(payload)], 'call-stands');
   setOverlayStatus('Call stands - action confirmed.', false);
@@ -3451,6 +3827,7 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
 
 window.onAndroidVideoReviewEdit = function(payloadJson) {
   const payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+  if (_libraryPlaybackMode) return;
   const index = resolveReviewEventIndex(payload);
   if (index < 0 || !M.events[index]) return;
   const source = (_reviewStartedFromRecording && _activeVideoReviewSource)
@@ -3497,6 +3874,11 @@ window.onAndroidVideoReviewNavigate = function(payloadJson) {
 
 window.onAndroidVideoReviewClose = function() {
   setOverlayStatus('', false);
+  if (_libraryPlaybackMode) {
+    _libraryPlaybackMode = false;
+    openLibrary();
+    return;
+  }
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
