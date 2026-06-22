@@ -44,6 +44,9 @@ body.android-native-preview .app-root{background:transparent}
 .setup-col.right{background:linear-gradient(180deg,var(--R3) 0%,rgba(230,38,0,0.04) 100%)}
 .setup-avatar{width:70px;height:70px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:30px}
 .setup-name-input{margin-top:10px;width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 6px;color:#fff;font-family:var(--head);font-size:13px;font-weight:600;text-align:center;outline:none}
+.profile-recent{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px;justify-content:center;min-height:22px}
+.profile-chip{max-width:96px;padding:4px 7px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,0.045);color:var(--muted);font-family:var(--mono);font-size:9px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-chip:active{transform:scale(0.96)}
 .setup-side-tag{margin-top:auto;width:100%;padding:12px 0;text-align:center;font-family:var(--head);font-weight:700;font-size:15px;color:#fff;border-radius:6px}
 .setup-col.left .setup-side-tag{background:linear-gradient(90deg,rgba(10,67,255,0.1),var(--L))}
 .setup-col.right .setup-side-tag{background:linear-gradient(90deg,var(--R),rgba(159,25,3,0.1))}
@@ -156,6 +159,16 @@ body.android-native-preview .timer-num{text-shadow:0 2px 8px #000}
 .mid-btn{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);padding:12px 28px;border-radius:24px;font-family:var(--body);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 #pause-btn{background:var(--R2);color:var(--R);border:1.5px solid var(--R)}
 #resume-btn{background:#0a39d4;color:#fff;display:none}
+.live-clock #pause-btn{left:45%;padding:11px 20px}
+.live-clock #resume-btn{left:55%;display:block;padding:11px 20px}
+.mid-btn:disabled{opacity:.38;transform:translateX(-50%) scale(.98)}
+.end-bout-btn{position:absolute;top:52px;left:50%;transform:translateX(-50%);display:none;padding:8px 16px;border-radius:18px;background:rgba(0,0,0,0.66);border:1px solid rgba(255,255,255,0.22);color:#fff;font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;z-index:12}
+.simple-controls{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);display:none;grid-template-columns:repeat(3,minmax(78px,1fr));gap:8px;width:min(82vw,420px);z-index:12}
+.simple-controls.on{display:grid}
+.simple-btn{padding:10px 8px;border-radius:8px;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#fff;border:1px solid rgba(255,255,255,0.2);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.simple-hit-left{background:#0a5fa8}.simple-hit-right{background:#a8270a}
+.simple-off{background:#8a5300}.simple-review{background:#124f55}.simple-undo{background:#272d39}
+.complex-hidden{display:none!important}
 .confirm-wrap{position:absolute;bottom:70px;display:none;flex-direction:column;gap:10px;align-items:center;z-index:30}
 .confirm-wrap.on{display:flex}
 .confirm-wrap.left-side{left:16px}
@@ -293,7 +306,8 @@ body.android-native-preview #import-preview{display:none!important}
 <div id="s-setup" class="screen active">
   <div class="setup-col left">
     <div class="setup-avatar" id="av-l">🤺</div>
-    <input class="setup-name-input" id="name-l" type="text" maxlength="18" placeholder="LEFT FENCER" autocomplete="off" spellcheck="false">
+    <input class="setup-name-input" id="name-l" type="text" maxlength="18" placeholder="LEFT FENCER" autocomplete="off" spellcheck="false" list="profile-list">
+    <div class="profile-recent" id="profile-recent-l"></div>
     <div class="setup-side-tag">LEFT</div>
   </div>
   <div class="setup-center">
@@ -330,9 +344,17 @@ body.android-native-preview #import-preview{display:none!important}
           <button class="chip" data-group="fmt" data-val="poule">POULE</button>
         </div>
       </div>
+      <div class="opt-row">
+        <span class="opt-label">MODE</span>
+        <div class="chip-row">
+          <button class="chip active" data-group="mode" data-val="simple">SIMPLE LIVE</button>
+          <button class="chip" data-group="mode" data-val="complex">COMPLEX</button>
+        </div>
+      </div>
     </div>
     <div class="setup-btns">
-      <button class="rnd rnd-start" id="btn-start">▶ START MATCH</button>
+      <button class="rnd rnd-start" id="btn-start">▶ CREATE BOUT</button>
+      <button class="rnd rnd-end" id="btn-swap-sides">⇄ SWAP SIDES</button>
       <button class="rnd rnd-end" id="btn-import-video">⬆ IMPORT VIDEO</button>
       <button class="rnd rnd-end" id="btn-library">▶ BOUT LIBRARY</button>
       <button class="rnd rnd-end" id="btn-load">⬆ LOAD JSON</button>
@@ -342,9 +364,11 @@ body.android-native-preview #import-preview{display:none!important}
   </div>
   <div class="setup-col right">
     <div class="setup-avatar" id="av-r">🤺</div>
-    <input class="setup-name-input" id="name-r" type="text" maxlength="18" placeholder="RIGHT FENCER" autocomplete="off" spellcheck="false">
+    <input class="setup-name-input" id="name-r" type="text" maxlength="18" placeholder="RIGHT FENCER" autocomplete="off" spellcheck="false" list="profile-list">
+    <div class="profile-recent" id="profile-recent-r"></div>
     <div class="setup-side-tag">RIGHT</div>
   </div>
+  <datalist id="profile-list"></datalist>
 </div>
 
 <!-- ── SCREEN 0B: BOUT LIBRARY ── -->
@@ -421,9 +445,18 @@ body.android-native-preview #import-preview{display:none!important}
     <button class="sec-btn foul-right" id="btn-foul-r" title="Foul R">🟡</button>
     <button class="sec-btn chal-left" id="btn-chal-l" title="Video L">📹</button>
     <button class="sec-btn chal-right" id="btn-chal-r" title="Video R">📹</button>
+    <div class="simple-controls" id="simple-controls">
+      <button class="simple-btn simple-hit-left" id="simple-left-hit">LEFT HIT</button>
+      <button class="simple-btn simple-review" id="simple-review">REVIEW</button>
+      <button class="simple-btn simple-hit-right" id="simple-right-hit">RIGHT HIT</button>
+      <button class="simple-btn simple-off" id="simple-left-off">LEFT OFF</button>
+      <button class="simple-btn simple-undo" id="simple-undo">UNDO</button>
+      <button class="simple-btn simple-off" id="simple-right-off">RIGHT OFF</button>
+    </div>
     <!-- Pause / resume -->
-    <button class="mid-btn" id="pause-btn">⏸ PAUSE</button>
-    <button class="mid-btn" id="resume-btn">▶ RESUME</button>
+    <button class="mid-btn" id="pause-btn">HALT</button>
+    <button class="mid-btn" id="resume-btn">FENCE</button>
+    <button class="end-bout-btn" id="end-bout-btn">END BOUT</button>
 
     <!-- Confirm overlays -->
     <div class="confirm-wrap left-side" id="conf-l">
@@ -600,6 +633,7 @@ const ACTIONS = {
   102:{id:102,label:'Flèche',           emoji:'⚡', side:'L',isHit:true},
   103:{id:103,label:'Beat Attack',      emoji:'🥊', side:'L',isHit:true},
   104:{id:104,label:'Prise de Fer',     emoji:'🔗', side:'L',isHit:true},
+  105:{id:105,label:'Touch',            emoji:'🎯', side:'L',isHit:true},
   // Left — DEFENSE ROW (defender establishes right of way)
   110:{id:110,label:'Parry-Riposte',    emoji:'🛡️', side:'L',isHit:true},
   112:{id:112,label:'Point in Line',    emoji:'📍', side:'L',isHit:true},
@@ -621,6 +655,7 @@ const ACTIONS = {
   202:{id:202,label:'Flèche',           emoji:'⚡', side:'R',isHit:true},
   203:{id:203,label:'Beat Attack',      emoji:'🥊', side:'R',isHit:true},
   204:{id:204,label:'Prise de Fer',     emoji:'🔗', side:'R',isHit:true},
+  205:{id:205,label:'Touch',            emoji:'🎯', side:'R',isHit:true},
   // Right — DEFENSE ROW
   210:{id:210,label:'Parry-Riposte',    emoji:'🛡️', side:'R',isHit:true},
   212:{id:212,label:'Point in Line',    emoji:'📍', side:'R',isHit:true},
@@ -694,8 +729,12 @@ let PS = {left:null, right:null}; // pending pie selection {menuType, side}
 const STORE_INDEX_KEY = 'ufl:index';
 const STORE_CLIENT_KEY = 'ufl:clientId';
 const STORE_MATCH_PREFIX = 'ufl:match:';
+const STORE_FENCER_INDEX_KEY = 'ufl:fencer:index';
+const STORE_FENCER_PREFIX = 'ufl:fencer:';
+const STORE_LESSON_LEDGER_PREFIX = 'ufl:lesson-ledger:';
 let _saveTimer = null;
 let _libraryPlaybackMode = false;
+let _selectedProfiles = { L: null, R: null };
 
 function uuid() {
   if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -727,6 +766,180 @@ function readIndex() {
 function writeIndex(index) {
   localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(index));
 }
+
+function escapeHtml(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizedName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
+function readFencerIndex() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORE_FENCER_INDEX_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeFencerIndex(index) {
+  localStorage.setItem(STORE_FENCER_INDEX_KEY, JSON.stringify(index));
+}
+
+function fencerKey(id) {
+  return STORE_FENCER_PREFIX + id;
+}
+
+function loadFencerProfile(id) {
+  if (!id) return null;
+  try {
+    return JSON.parse(localStorage.getItem(fencerKey(id)) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeFencerProfile(profile) {
+  if (!profile || !profile.id) return null;
+  profile.updatedAt = Date.now();
+  localStorage.setItem(fencerKey(profile.id), JSON.stringify(profile));
+  const row = {
+    id: profile.id,
+    name: profile.name,
+    club: profile.club || '',
+    handedness: profile.handedness || '',
+    boutCount: Number(profile.boutCount) || 0,
+    createdAt: Number(profile.createdAt) || Date.now(),
+    updatedAt: profile.updatedAt,
+    lastUsedAt: Number(profile.lastUsedAt) || profile.updatedAt,
+  };
+  const rest = readFencerIndex().filter(existing => existing && existing.id !== profile.id);
+  writeFencerIndex([row, ...rest].sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0)));
+  return profile;
+}
+
+function profileByName(name) {
+  const n = normalizedName(name).toLowerCase();
+  if (!n) return null;
+  for (const row of readFencerIndex()) {
+    if (normalizedName(row && row.name).toLowerCase() === n) return loadFencerProfile(row.id) || row;
+  }
+  return null;
+}
+
+function ensureFencerProfile(name, preferredId) {
+  const clean = normalizedName(name);
+  if (!clean) return null;
+  let profile = loadFencerProfile(preferredId) || profileByName(clean);
+  if (!profile) {
+    profile = {
+      id: uuid(),
+      clientId: clientId(),
+      name: clean,
+      club: '',
+      handedness: '',
+      boutCount: 0,
+      matchIds: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      lastUsedAt: Date.now(),
+    };
+  }
+  profile.name = clean;
+  profile.lastUsedAt = Date.now();
+  if (!Array.isArray(profile.matchIds)) profile.matchIds = [];
+  return writeFencerProfile(profile);
+}
+
+function attachMatchToFencer(profileId, matchId) {
+  const profile = loadFencerProfile(profileId);
+  if (!profile || !matchId) return;
+  if (!Array.isArray(profile.matchIds)) profile.matchIds = [];
+  if (!profile.matchIds.includes(matchId)) profile.matchIds.push(matchId);
+  profile.boutCount = profile.matchIds.length;
+  profile.lastUsedAt = Date.now();
+  writeFencerProfile(profile);
+}
+
+function profileForInput(side) {
+  const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
+  const name = normalizedName(input && input.value);
+  const selectedId = _selectedProfiles[side];
+  const selected = loadFencerProfile(selectedId);
+  if (selected && normalizedName(selected.name).toLowerCase() === name.toLowerCase()) return selected;
+  return profileByName(name);
+}
+
+function resolveProfileForSide(side, fallbackName) {
+  const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
+  const name = normalizedName((input && input.value) || fallbackName || (side === 'L' ? 'LEFT' : 'RIGHT'));
+  const existing = profileForInput(side);
+  const profile = ensureFencerProfile(name, existing && existing.id);
+  _selectedProfiles[side] = profile ? profile.id : null;
+  return profile;
+}
+
+function renderProfilePickers() {
+  const rows = readFencerIndex();
+  const datalist = document.getElementById('profile-list');
+  if (datalist) datalist.innerHTML = rows.map(row => `<option value="${escapeHtml(row.name)}"></option>`).join('');
+  ['L', 'R'].forEach(side => {
+    const wrap = document.getElementById(side === 'L' ? 'profile-recent-l' : 'profile-recent-r');
+    if (!wrap) return;
+    wrap.innerHTML = rows.slice(0, 4)
+      .map(row => `<button class="profile-chip" data-profile-side="${side}" data-profile-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button>`)
+      .join('');
+  });
+}
+
+function selectFencerProfile(side, id) {
+  const profile = loadFencerProfile(id);
+  if (!profile) return;
+  _selectedProfiles[side] = profile.id;
+  const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
+  if (input) input.value = profile.name;
+}
+
+function lessonLedgerKey(fencerId) {
+  return STORE_LESSON_LEDGER_PREFIX + fencerId;
+}
+
+function readLessonLedger(fencerId) {
+  if (!fencerId) return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(lessonLedgerKey(fencerId)) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function recordLessonProgress(fencerId, lessonId, countDelta = 1, note = '') {
+  if (!fencerId || !lessonId) return null;
+  const entry = {
+    id: uuid(),
+    lessonId: String(lessonId),
+    source: 'manual',
+    countDelta: Number(countDelta) || 1,
+    completedAt: Date.now(),
+    createdAt: Date.now(),
+    note: String(note || ''),
+  };
+  const ledger = readLessonLedger(fencerId);
+  ledger.push(entry);
+  localStorage.setItem(lessonLedgerKey(fencerId), JSON.stringify(ledger));
+  return entry;
+}
+
+window.recordLessonProgress = recordLessonProgress;
+window.readLessonLedger = readLessonLedger;
 
 function ensureMatchIdentity(match) {
   if (!match) return null;
@@ -804,6 +1017,8 @@ function matchMeta(match, stats) {
     id,
     nameL: match.nameL || 'LEFT',
     nameR: match.nameR || 'RIGHT',
+    fencerLId: match.fencerLId || null,
+    fencerRId: match.fencerRId || null,
     scoreL: Number(match.scoreL) || 0,
     scoreR: Number(match.scoreR) || 0,
     finished: !!match.finished,
@@ -824,6 +1039,8 @@ function persistMatchNow() {
   M.updatedAt = Date.now();
   M.stats = computeMatchStats(M);
   localStorage.setItem(STORE_MATCH_PREFIX + id, JSON.stringify(M));
+  attachMatchToFencer(M.fencerLId, id);
+  attachMatchToFencer(M.fencerRId, id);
   const meta = matchMeta(M, M.stats);
   const rest = readIndex().filter(row => row && row.id !== id);
   writeIndex([meta, ...rest].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
@@ -863,6 +1080,9 @@ function newMatchState(cfg) {
     clientId: clientId(),
     nameL: cfg.nameL || 'LEFT',
     nameR: cfg.nameR || 'RIGHT',
+    fencerLId: cfg.fencerLId || null,
+    fencerRId: cfg.fencerRId || null,
+    captureMode: cfg.mode || 'simple',
     weapon: cfg.weapon || 'foil',
     format: cfg.format || 'DE',
     totalPeriods: cfg.periods || 1,
@@ -919,6 +1139,77 @@ function refreshHUD() {
   document.getElementById('cards-r').textContent = M.cardsR.join(' ');
 }
 
+function isLiveMode() {
+  return !!(M && M.captureMode === 'simple');
+}
+
+function shouldAutoResumeAfterEntry() {
+  return !!(M && !M.finished && !isLiveMode());
+}
+
+function resumeAfterEntryIfNeeded() {
+  if (shouldAutoResumeAfterEntry()) startTimer();
+  else updateClockControls();
+}
+
+function updateCaptureModeUI() {
+  const live = isLiveMode();
+  const root = document.getElementById('operate');
+  if (root) root.classList.toggle('live-clock', live);
+  document.getElementById('simple-controls').classList.toggle('on', live);
+  ['btn-act-l', 'btn-act-r', 'btn-foul-l', 'btn-foul-r', 'btn-chal-l', 'btn-chal-r'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('complex-hidden', live);
+  });
+  updateClockControls();
+}
+
+function updateClockControls() {
+  const halt = document.getElementById('pause-btn');
+  const fence = document.getElementById('resume-btn');
+  const end = document.getElementById('end-bout-btn');
+  if (!halt || !fence || !end) return;
+  if (!M || M.finished) {
+    halt.style.display = 'block';
+    fence.style.display = 'none';
+    halt.disabled = true;
+    fence.disabled = true;
+    end.style.display = 'none';
+    return;
+  }
+  if (isLiveMode()) {
+    halt.textContent = 'HALT';
+    fence.textContent = 'FENCE';
+    halt.style.display = 'block';
+    fence.style.display = 'block';
+    end.style.display = 'block';
+    halt.disabled = !M.running;
+    fence.disabled = !!M.running;
+    return;
+  }
+  halt.textContent = '⏸ PAUSE';
+  fence.textContent = '▶ RESUME';
+  halt.style.display = 'block';
+  fence.style.display = 'none';
+  end.style.display = 'none';
+  halt.disabled = false;
+  fence.disabled = false;
+}
+
+function fenceClock() {
+  if (!M || M.finished || M.running) return;
+  showScreen('s-match');
+  startTimer();
+  setOverlayStatus('Fence.', false);
+}
+
+function haltClock(message = 'Halted. Tap FENCE to restart time.') {
+  if (!M || M.finished) return;
+  stopTimer();
+  showScreen('s-match');
+  setOverlayStatus(message, false);
+}
+
 // ── Timer ─────────────────────────────────────────────────────────────────────
 let _timerInterval = null;
 
@@ -929,12 +1220,14 @@ function startTimer() {
     M.running = true;
     resumeImportedVideo();
     updateImportControls();
+    updateClockControls();
     return;
   }
   if (_timerInterval) return;
   noteRecordingClockResume();
   M.running = true;
   resumeImportedVideo();
+  updateClockControls();
   _timerInterval = setInterval(() => {
     if (!M.running) return;
     if (M.timerSec > 0 || isImportedVideoAnnotationMode()) {
@@ -944,6 +1237,7 @@ function startTimer() {
       clearInterval(_timerInterval);
       _timerInterval = null;
       M.running = false;
+      updateClockControls();
       endPeriod();
     }
   }, 1000);
@@ -955,6 +1249,7 @@ function stopTimer() {
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   M.running = false;
   if (isImportedVideoAnnotationMode()) updateImportControls();
+  updateClockControls();
 }
 
 function endPeriod() {
@@ -972,6 +1267,7 @@ function finishMatch() {
   const stoppingRecording = stopActiveRecording({ autoStop: true });
   M.finished = true;
   scheduleSave();
+  updateClockControls();
   const winner = M.scoreL > M.scoreR ? M.nameL : M.scoreR > M.scoreL ? M.nameR : 'DRAW';
   showResultScreen(winner === 'DRAW' ? 'DRAW' : winner + ' WINS!');
   document.getElementById('res-resume').style.display = 'none';
@@ -1007,21 +1303,29 @@ async function clickStart() {
   }
   const nameL = document.getElementById('name-l').value.trim() || 'LEFT';
   const nameR = document.getElementById('name-r').value.trim() || 'RIGHT';
-  M = newMatchState({ nameL, nameR, ...CFG });
+  const profileL = resolveProfileForSide('L', nameL);
+  const profileR = resolveProfileForSide('R', nameR);
+  M = newMatchState({
+    nameL,
+    nameR,
+    fencerLId: profileL ? profileL.id : null,
+    fencerRId: profileR ? profileR.id : null,
+    ...CFG,
+  });
   _autoExportDone = false;
   scheduleSave();
+  renderProfilePickers();
   refreshHUD();
   document.getElementById('hud-name-l').textContent = nameL;
   document.getElementById('hud-name-r').textContent = nameR;
   showScreen('s-match');
-  document.getElementById('pause-btn').style.display  = 'block';
-  document.getElementById('resume-btn').style.display = 'none';
   attachImportedVideoPreview(true);
   if (_nativeImportVideo && isAndroidNativeVideoAvailable() && typeof AndroidVideo.seekImportedPreview === 'function') {
     AndroidVideo.seekImportedPreview(0);
   }
   updateImportedVideoModeUI();
-  if (isImportedVideoAnnotationMode()) {
+  updateCaptureModeUI();
+  if (isImportedVideoAnnotationMode() && !isLiveMode()) {
     // Gamified annotation: the video is the match. No countdown - playback
     // starts immediately and the clock follows the video position.
     _importSpeed = 1;
@@ -1030,12 +1334,16 @@ async function clickStart() {
     return;
   }
   await prepareRecordingBeforeStart();
-  runCountdown(() => {
-    showScreen('s-match');
-    document.getElementById('pause-btn').style.display  = 'block';
-    document.getElementById('resume-btn').style.display = 'none';
-    startTimer();
-  });
+  if (!isLiveMode()) {
+    runCountdown(() => {
+      showScreen('s-match');
+      updateClockControls();
+      startTimer();
+    });
+    return;
+  }
+  updateClockControls();
+  setOverlayStatus('Bout created. Tap FENCE when both fencers are ready.', false);
 }
 
 document.getElementById('btn-start').addEventListener('touchend', e => {
@@ -1057,6 +1365,7 @@ function showResultScreen(title) {
   document.getElementById('res-stats-r').textContent =
     `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
     `Cards:${M.cardsR.length}`;
+  document.getElementById('res-resume').textContent = isLiveMode() ? 'FENCE' : '▶ RESUME';
   document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
   document.getElementById('res-end').style.display    = M.finished ? 'none' : 'block';
   document.getElementById('res-new').style.display    = M.finished ? 'block' : 'none';
@@ -1065,6 +1374,10 @@ function showResultScreen(title) {
 
 document.getElementById('pause-btn').addEventListener('touchend', e => {
   e.preventDefault();
+  if (isLiveMode()) {
+    haltClock();
+    return;
+  }
   stopTimer();
   showResultScreen('MATCH PAUSED');
 }, {passive:false});
@@ -1077,8 +1390,15 @@ document.getElementById('res-resume').addEventListener('touchend', e => {
 
 document.getElementById('resume-btn').addEventListener('touchend', e => {
   e.preventDefault();
-  showScreen('s-match');
-  startTimer();
+  fenceClock();
+}, {passive:false});
+
+document.getElementById('end-bout-btn').addEventListener('touchend', e => {
+  e.preventDefault();
+  if (!M || M.finished) return;
+  if (!confirm('End this bout?')) return;
+  stopTimer();
+  finishMatch();
 }, {passive:false});
 
 document.getElementById('res-simul').addEventListener('touchend', e => {
@@ -1088,7 +1408,7 @@ document.getElementById('res-simul').addEventListener('touchend', e => {
     M.events.push({ ts, side:'C', actionId:124, label:'Simultaneous', emoji:'⚖️', isHit:false, period:M.period });
   }
   showScreen('s-match');
-  if (M && !M.finished) startTimer();
+  resumeAfterEntryIfNeeded();
 }, {passive:false});
 
 document.getElementById('res-events').addEventListener('touchend', e => {
@@ -1115,6 +1435,7 @@ document.getElementById('res-new').addEventListener('touchend', e => {
   _nativeRecordedVideo = null;
   _nativeRecordedPayload = null;
   M = null;
+  updateCaptureModeUI();
   document.getElementById('fab-btn').style.display = 'none';
   showScreen('s-setup');
 }, {passive:false});
@@ -1192,7 +1513,9 @@ function loadLibraryMatch(id) {
     return;
   }
   M = match;
+  if (!M.captureMode) M.captureMode = 'complex';
   refreshHUD();
+  updateCaptureModeUI();
   document.getElementById('hud-name-l').textContent = M.nameL;
   document.getElementById('hud-name-r').textContent = M.nameR;
   document.getElementById('fab-btn').style.display = 'flex';
@@ -1533,7 +1856,7 @@ function closePie(side, resume = true){
     ov.style.display='none';
     while(_rSlicesG.firstChild)_rSlicesG.removeChild(_rSlicesG.firstChild);
   },220);
-  if(resume&&M&&!M.finished)startTimer();
+  if(resume)resumeAfterEntryIfNeeded();
 }
 
 (function initRadial(){
@@ -1571,7 +1894,7 @@ function showConfirm(side, actionId) {
   if (actionId === 3) {
     _pendingAction = null;
     const launched = startVideoReviewForIndex();
-    if (!launched && M && !M.finished) startTimer();
+    if (!launched) resumeAfterEntryIfNeeded();
     return;
   }
   _pendingAction = {side, actionId};
@@ -1690,7 +2013,7 @@ function applyAnnulOverturn() {
   _activeVideoReviewSource = null;
   _resumeImportedAfterVideoReview = false;
   setOverlayStatus('Touch annulled.', false);
-  if (!M.finished) startTimer();
+  resumeAfterEntryIfNeeded();
 }
 
 document.getElementById('ovr-other').addEventListener('touchend', e => {
@@ -1734,7 +2057,7 @@ document.getElementById('ovr-cancel').addEventListener('touchend', e => {
   // Plain confirm (cards / ref actions)
   document.getElementById(`conf-${s}-yes`).addEventListener('touchend', e => {
     e.preventDefault();
-    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId, _pendingAction.actionId > 10 ? false : false);
+    if (_pendingAction) doConfirm(_pendingAction.side, _pendingAction.actionId);
     hideConfirm();
   }, {passive:false});
   // Cancel
@@ -1742,7 +2065,7 @@ document.getElementById('ovr-cancel').addEventListener('touchend', e => {
     e.preventDefault();
     hideConfirm();
     if (returnToVideoReviewAfterCorrectionCancel()) return;
-    if (!M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
   }, {passive:false});
 });
 
@@ -1768,9 +2091,55 @@ document.getElementById('btn-chal-r').addEventListener('touchend', e => {
   e.preventDefault(); stopTimer(); showConfirm('R', 3);
 }, {passive:false});
 
-// ── doConfirm — record action, update state ───────────────────────────────────
-function doConfirm(side, actionId, isHit) {
+function recordSimpleOutcome(side, outcome) {
   if (!M || M.finished) return;
+  stopTimer();
+  const hit = outcome === 'hit';
+  const actionId = hit
+    ? (side === 'L' ? 105 : 205)
+    : (side === 'L' ? 140 : 240);
+  doConfirm(side, actionId, hit, {
+    entryMode: 'simple',
+    outcome: hit ? 'hit' : 'offTarget',
+    callClass: 'unknown',
+  });
+  setOverlayStatus(`${side === 'L' ? M.nameL : M.nameR} ${hit ? 'hit' : 'off target'} recorded. Tap FENCE to restart time.`, false);
+}
+
+function undoLastEvent() {
+  if (!M || M.finished || !Array.isArray(M.events) || !M.events.length) return;
+  stopTimer();
+  M.events.pop();
+  recomputeMatchScoreFromEvents();
+  if (typeof scheduleSave === 'function') scheduleSave();
+  buildReport();
+  setOverlayStatus('Last event removed. Tap FENCE to restart time.', false);
+  updateClockControls();
+}
+
+document.getElementById('simple-left-hit').addEventListener('touchend', e => {
+  e.preventDefault(); recordSimpleOutcome('L', 'hit');
+}, {passive:false});
+document.getElementById('simple-right-hit').addEventListener('touchend', e => {
+  e.preventDefault(); recordSimpleOutcome('R', 'hit');
+}, {passive:false});
+document.getElementById('simple-left-off').addEventListener('touchend', e => {
+  e.preventDefault(); recordSimpleOutcome('L', 'offTarget');
+}, {passive:false});
+document.getElementById('simple-right-off').addEventListener('touchend', e => {
+  e.preventDefault(); recordSimpleOutcome('R', 'offTarget');
+}, {passive:false});
+document.getElementById('simple-review').addEventListener('touchend', e => {
+  e.preventDefault(); stopTimer(); showConfirm('L', 3);
+}, {passive:false});
+document.getElementById('simple-undo').addEventListener('touchend', e => {
+  e.preventDefault(); undoLastEvent();
+}, {passive:false});
+
+// ── doConfirm — record action, update state ───────────────────────────────────
+function doConfirm(side, actionId, isHit, meta = {}) {
+  if (!M || M.finished) return;
+  if (isLiveMode()) stopTimer();
   const action    = ACTIONS[actionId];
   const ts        = M.periodDuration - M.timerSec;
   const scored    = isHit === undefined ? (action ? action.isHit : false) : isHit;
@@ -1781,7 +2150,8 @@ function doConfirm(side, actionId, isHit) {
                       isHit: scored,
                       period: M.period,
                       reviewed: false,
-                      reviewStatus: 'pending' };
+                      reviewStatus: 'pending',
+                      ...meta };
 
   const editIndex = _reviewEditId !== null ? eventIndexById(_reviewEditId) : -1;
   if (_reviewEditId !== null && editIndex < 0) {
@@ -1836,14 +2206,13 @@ function doConfirm(side, actionId, isHit) {
     buildReport();
     recordReviewOutcomeEvent(M.events[editedIndex],
       overturnOutcome === 'awarded-other' ? 'overturned:awarded-other' : 'corrected');
-    // The decision is made: return to the match (recording was already
-    // restarted when OVERTURN was tapped) and resume the bout clock. Drop the
-    // cached review source - the next review must see the newest footage.
+    // The decision is made: return to the match. Drop the cached review source -
+    // the next review must see the newest footage.
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
     _resumeImportedAfterVideoReview = false;
     setOverlayStatus('Correction saved.', false);
-    if (!M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
     return;
   }
 
@@ -1872,7 +2241,7 @@ function doConfirm(side, actionId, isHit) {
   // Win condition: DE ends at 15 touches; poule at 5
   const maxScore = M.format === 'poule' ? 5 : 15;
   if (!isImportedVideoAnnotationMode() && (M.scoreL >= maxScore || M.scoreR >= maxScore)) { finishMatch(); return; }
-  if (!M.finished) startTimer();
+  resumeAfterEntryIfNeeded();
 }
 
 // ── Events list render ────────────────────────────────────────────────────────
@@ -2721,12 +3090,12 @@ function markRecordingStart(boutElapsed) {
   return _recBoutStart;
 }
 
-async function prepareRecordingBeforeStart() {
+async function prepareRecordingBeforeStart(recordingStartBoutElapsed = 0) {
   try {
     if (_camState === 'idle') await toggleCamera();
     if (_camState === 'preview') {
       if (isAndroidNativeRecordingAvailable()) {
-        _nativePendingRecordingStartBoutElapsed = -START_COUNTDOWN_SECONDS;
+        _nativePendingRecordingStartBoutElapsed = recordingStartBoutElapsed;
       }
       await toggleCamera();
     }
@@ -3810,18 +4179,18 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    restartNativeRecordingAfterReview({ resumeTimer: true });
+    restartNativeRecordingAfterReview({ resumeTimer: !isLiveMode() });
   } else if (_resumeImportedAfterVideoReview) {
     _resumeImportedAfterVideoReview = false;
-    if (M && !M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
   } else if (_reviewStartedFromRecording) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    if (M && !M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
   } else if (M && !M.finished) {
-    // Review opened from already-stored footage (recording, if any, was never
-    // interrupted): still resume the bout clock on exit.
-    startTimer();
+    // Review opened from already-stored footage. Complex mode resumes on exit;
+    // Live mode stays halted until FENCE.
+    resumeAfterEntryIfNeeded();
   }
 };
 
@@ -3882,16 +4251,16 @@ window.onAndroidVideoReviewClose = function() {
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    restartNativeRecordingAfterReview({ resumeTimer: true });
+    restartNativeRecordingAfterReview({ resumeTimer: !isLiveMode() });
   } else if (_resumeImportedAfterVideoReview) {
     _resumeImportedAfterVideoReview = false;
-    if (M && !M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
   } else if (_reviewStartedFromRecording) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    if (M && !M.finished) startTimer();
+    resumeAfterEntryIfNeeded();
   } else if (M && !M.finished) {
-    startTimer();
+    resumeAfterEntryIfNeeded();
   }
 };
 
@@ -3995,6 +4364,8 @@ function buildReport() {
 
   // ── Radar axes: every possible action, grouped by category ──────────────────
   const RADAR_AXES = [
+    // SIMPLE LIVE
+    {label:'Touch',       L:105, R:205},
     // OFFENSE
     {label:'Simple Att.', L:100, R:200},
     {label:'Compound',    L:101, R:201},
@@ -4156,7 +4527,7 @@ window.addEventListener('resize', checkOrientation);
 checkOrientation();
 
 // ── Settings state ────────────────────────────────────────────────────────────
-const CFG = { weapon:'foil', periods:1, duration:3, format:'DE' };
+const CFG = { weapon:'foil', periods:1, duration:3, format:'DE', mode:'simple' };
 
 // ── Chip selector setup ───────────────────────────────────────────────────────
 document.querySelectorAll('.chip').forEach(btn => {
@@ -4170,8 +4541,38 @@ document.querySelectorAll('.chip').forEach(btn => {
     if (group === 'per')  CFG.periods  = +val;
     if (group === 'dur')  CFG.duration = +val;
     if (group === 'fmt')  CFG.format   = val;
+    if (group === 'mode') CFG.mode     = val;
   }, {passive:false});
 });
+
+['L', 'R'].forEach(side => {
+  const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
+  input.addEventListener('input', () => {
+    const profile = profileByName(input.value);
+    _selectedProfiles[side] = profile ? profile.id : null;
+  });
+});
+
+document.getElementById('s-setup').addEventListener('touchend', e => {
+  const chip = e.target.closest('.profile-chip');
+  if (!chip) return;
+  e.preventDefault();
+  selectFencerProfile(chip.dataset.profileSide, chip.dataset.profileId);
+}, {passive:false});
+
+document.getElementById('btn-swap-sides').addEventListener('touchend', e => {
+  e.preventDefault();
+  const left = document.getElementById('name-l');
+  const right = document.getElementById('name-r');
+  const leftValue = left.value;
+  left.value = right.value;
+  right.value = leftValue;
+  const leftProfile = _selectedProfiles.L;
+  _selectedProfiles.L = _selectedProfiles.R;
+  _selectedProfiles.R = leftProfile;
+}, {passive:false});
+
+renderProfilePickers();
 </script>
 </body>
 </html>

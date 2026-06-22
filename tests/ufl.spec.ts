@@ -8,11 +8,39 @@ const parseTimer = (s: string): number => {
   return m * 60 + sec;
 };
 
-const startMatch = async (page: Page) => {
+test.beforeEach(async ({ page }) => {
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/css',
+    body: '',
+  }));
+  await page.route('https://fonts.gstatic.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'font/woff2',
+    body: '',
+  }));
+});
+
+const startMatch = async (page: Page, opts: { fence?: boolean; mode?: 'simple' | 'complex' } = {}) => {
   await page.locator('#name-l').fill('LEFT');
   await page.locator('#name-r').fill('RIGHT');
+  const isAndroidApp = page.url().includes('/ufl-android/');
+  const mode = opts.mode || (isAndroidApp ? 'complex' : null);
+  if (mode) {
+    await page.locator(`[data-group="mode"][data-val="${mode}"]`).tap();
+  }
   await page.locator('#btn-start').tap();
   await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
+  if (opts.fence === false) return;
+  if (!(isAndroidApp && mode === 'simple')) {
+    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 6000 }).toBe(true);
+    await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
+  }
+  const fence = page.locator('#resume-btn');
+  if (await fence.isVisible().catch(() => false)) {
+    await fence.tap();
+    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 5000 }).toBe(true);
+  }
 };
 
 test.describe('UFL fencing app', () => {
@@ -151,6 +179,8 @@ test.describe('UX-1 persistence', () => {
     await page.goto(APP_PATH);
     await startMatch(page);
     await page.locator('#pause-btn').tap();
+    await expect(page.locator('#s-result.active')).toBeVisible();
+    await expect(page.locator('#res-end')).toBeVisible();
     await page.locator('#res-end').tap();
     await page.waitForTimeout(300);
 
@@ -214,6 +244,121 @@ test.describe('UX-1 persistence', () => {
     const leftover = await page.evaluate(() =>
       Object.keys(localStorage).filter(k => k.startsWith('ufl:match:')).length);
     expect(leftover).toBe(0);
+  });
+});
+
+test.describe('android live UX foundation', () => {
+  test('creates an armed live bout and only starts the clock on FENCE', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await page.locator('#name-l').fill('ALICE');
+    await page.locator('#name-r').fill('BOB');
+    await page.locator('#btn-start').tap();
+    await expect(page.locator('#s-match.active')).toBeVisible();
+
+    await expect(page.locator('#resume-btn')).toHaveText('FENCE');
+    await expect(page.locator('#pause-btn')).toHaveText('HALT');
+    await expect(page.locator('#resume-btn')).toBeEnabled();
+    await expect(page.locator('#pause-btn')).toBeDisabled();
+
+    const armed = parseTimer(await page.locator('#timer-disp').innerText());
+    await page.waitForTimeout(1200);
+    expect(parseTimer(await page.locator('#timer-disp').innerText())).toBe(armed);
+    expect(await page.evaluate(() => M.running)).toBe(false);
+
+    await page.locator('#resume-btn').tap();
+    await page.waitForTimeout(1200);
+    const running = parseTimer(await page.locator('#timer-disp').innerText());
+    expect(running).toBeLessThan(armed);
+    expect(await page.evaluate(() => M.running)).toBe(true);
+
+    await page.locator('#pause-btn').tap();
+    const halted = parseTimer(await page.locator('#timer-disp').innerText());
+    await page.waitForTimeout(1200);
+    expect(parseTimer(await page.locator('#timer-disp').innerText())).toBe(halted);
+    expect(await page.evaluate(() => M.running)).toBe(false);
+  });
+
+  test('simple hit and off-target capture leave the live clock halted', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page, { mode: 'simple' });
+
+    await expect(page.locator('#simple-controls')).toHaveClass(/on/);
+    await page.locator('#simple-left-hit').tap();
+    const afterHit = parseTimer(await page.locator('#timer-disp').innerText());
+    await page.waitForTimeout(1200);
+    expect(parseTimer(await page.locator('#timer-disp').innerText())).toBe(afterHit);
+
+    let events = await page.evaluate(() => M.events.map((ev: any) => ({
+      actionId: ev.actionId,
+      side: ev.side,
+      entryMode: ev.entryMode,
+      outcome: ev.outcome,
+      isHit: ev.isHit,
+    })));
+    expect(events.at(-1)).toMatchObject({ actionId: 105, side: 'L', entryMode: 'simple', outcome: 'hit', isHit: true });
+    expect(await page.locator('#hud-pts-l').innerText()).toBe('1');
+    expect(await page.evaluate(() => M.running)).toBe(false);
+
+    await page.locator('#resume-btn').tap();
+    await page.waitForTimeout(300);
+    await page.locator('#simple-right-off').tap();
+    events = await page.evaluate(() => M.events.map((ev: any) => ({
+      actionId: ev.actionId,
+      side: ev.side,
+      entryMode: ev.entryMode,
+      outcome: ev.outcome,
+      isHit: ev.isHit,
+    })));
+    expect(events.at(-1)).toMatchObject({ actionId: 240, side: 'R', entryMode: 'simple', outcome: 'offTarget', isHit: false });
+    expect(await page.evaluate(() => M.running)).toBe(false);
+  });
+
+  test('profiles, side swap, match profile ids, and lesson ledger persist', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await page.locator('#name-l').fill('Alice Lee');
+    await page.locator('#name-r').fill('Bob Kim');
+    await page.locator('#btn-swap-sides').tap();
+    await expect(page.locator('#name-l')).toHaveValue('Bob Kim');
+    await expect(page.locator('#name-r')).toHaveValue('Alice Lee');
+
+    await page.locator('#btn-start').tap();
+    await expect(page.locator('#s-match.active')).toBeVisible();
+    await page.waitForTimeout(400);
+
+    const data = await page.evaluate(() => {
+      const idx = JSON.parse(localStorage.getItem('ufl:index') || '[]');
+      const match = JSON.parse(localStorage.getItem('ufl:match:' + idx[0].id) || 'null');
+      const profiles = JSON.parse(localStorage.getItem('ufl:fencer:index') || '[]');
+      const left = JSON.parse(localStorage.getItem('ufl:fencer:' + match.fencerLId) || 'null');
+      const entry = (window as any).recordLessonProgress(match.fencerLId, 'bladework.hit-blade', 1, 'first manual lesson');
+      const ledger = JSON.parse(localStorage.getItem('ufl:lesson-ledger:' + match.fencerLId) || '[]');
+      return { match, profiles, left, entry, ledger };
+    });
+
+    expect(data.match.nameL).toBe('Bob Kim');
+    expect(data.match.nameR).toBe('Alice Lee');
+    expect(data.match.fencerLId).toMatch(UUID_RE);
+    expect(data.match.fencerRId).toMatch(UUID_RE);
+    expect(data.profiles.map((p: any) => p.name)).toEqual(expect.arrayContaining(['Bob Kim', 'Alice Lee']));
+    expect(data.left.boutCount).toBe(1);
+    expect(data.entry.lessonId).toBe('bladework.hit-blade');
+    expect(data.ledger).toHaveLength(1);
+    expect(data.ledger[0]).toMatchObject({ source: 'manual', countDelta: 1, note: 'first manual lesson' });
+  });
+
+  test('complex mode keeps the full radial capture taxonomy', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await page.locator('[data-group="mode"][data-val="complex"]').tap();
+    await startMatch(page, { fence: false });
+
+    await expect(page.locator('#simple-controls')).not.toHaveClass(/(^|\s)on(\s|$)/);
+    await expect(page.locator('#btn-act-l')).toBeVisible();
+    const taxonomy = await page.evaluate(() => ({
+      offense: RADIAL_DEFS.OFFENSE.sectors.map((s: any) => s.label),
+      defense: RADIAL_DEFS.DEF_ROW.sectors.map((s: any) => s.label),
+    }));
+    expect(taxonomy.offense).toEqual(expect.arrayContaining(['Flèche', 'Beat Att.', 'Prise Fer']));
+    expect(taxonomy.defense).toEqual(expect.arrayContaining(['Parry-Rip.', 'No-Att Tch']));
   });
 });
 
@@ -1917,7 +2062,7 @@ test.describe('imported-video playback controls', () => {
 test.describe('radial menu OTHER sector label', () => {
   test('MAIN sectors expose OTHER and not NONE for the no-right-of-way slot', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
-    await startMatch(page);
+    await startMatch(page, { fence: false });
 
     const result = await page.evaluate(() => {
       const labels: string[] = RADIAL_DEFS.MAIN.sectors.map((s: any) => s.label);
@@ -1930,7 +2075,7 @@ test.describe('radial menu OTHER sector label', () => {
 
   test('breadcrumb shows OTHER when drilling into the no-right-of-way branch', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
-    await startMatch(page);
+    await startMatch(page, { fence: false });
 
     const result = await page.evaluate(() => {
       (window as any).openPie('L');
