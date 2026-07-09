@@ -38,35 +38,64 @@ body.android-native-preview .app-root{background:transparent}
 .screen.active{display:flex}
 
 /* ── SCREEN 0: SETUP ── */
-#s-setup{flex-direction:row;background:linear-gradient(135deg,#07080c 60%,#0a0e18)}
-.setup-col{width:140px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:20px 10px;position:relative;overflow:hidden}
+#s-setup{flex-direction:row;background:linear-gradient(135deg,#07080c 60%,#0a0e18);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.setup-col{width:156px;min-height:100%;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:18px 10px;position:relative;overflow:hidden}
 .setup-col.left{background:linear-gradient(180deg,var(--L3) 0%,rgba(0,199,255,0.04) 100%)}
 .setup-col.right{background:linear-gradient(180deg,var(--R3) 0%,rgba(230,38,0,0.04) 100%)}
 .setup-avatar{width:70px;height:70px;border-radius:50%;background:var(--s2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:30px}
 .setup-name-input{margin-top:10px;width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 6px;color:#fff;font-family:var(--head);font-size:13px;font-weight:600;text-align:center;outline:none}
-.profile-recent{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px;justify-content:center;min-height:22px}
-.profile-chip{max-width:96px;padding:4px 7px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,0.045);color:var(--muted);font-family:var(--mono);font-size:9px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-select{margin-top:8px;width:100%;min-height:34px;background:rgba(0,0,0,0.38);border:1px solid rgba(255,255,255,0.24);border-radius:7px;color:#fff;font-family:var(--head);font-size:12px;font-weight:800;letter-spacing:.2px;padding:7px 6px;outline:none}
+.profile-select option{background:#111722;color:#fff}
+.profile-recent{margin-top:8px;width:100%;display:flex;flex-direction:column;gap:6px;justify-content:flex-start;min-height:74px}
+.profile-chip{width:100%;max-width:none;padding:7px 6px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,0.07);color:#fff;font-family:var(--mono);font-size:10px;font-weight:800;line-height:1.1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .profile-chip:active{transform:scale(0.96)}
+.profile-save-btn{margin-top:7px;width:100%;padding:6px 5px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:rgba(0,0,0,0.28);color:#fff;font-family:var(--mono);font-size:9px;letter-spacing:.7px;text-transform:uppercase}
+.profile-save-btn:active{transform:scale(0.96)}
 .setup-side-tag{margin-top:auto;width:100%;padding:12px 0;text-align:center;font-family:var(--head);font-weight:700;font-size:15px;color:#fff;border-radius:6px}
 .setup-col.left .setup-side-tag{background:linear-gradient(90deg,rgba(10,67,255,0.1),var(--L))}
 .setup-col.right .setup-side-tag{background:linear-gradient(90deg,var(--R),rgba(159,25,3,0.1))}
-.setup-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 10px}
-.setup-score{font-family:var(--head);font-weight:800;font-size:36px;color:#fff;letter-spacing:6px}
-.setup-opts{display:flex;flex-direction:column;gap:10px;width:100%}
-.opt-row{display:flex;align-items:center;gap:8px;justify-content:center}
-.opt-label{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:60px;text-align:right}
-.chip-row{display:flex;gap:6px}
-.chip{padding:7px 14px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--muted);background:rgba(255,255,255,0);transition:all .15s;min-width:44px;text-align:center}
+.setup-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;padding:10px 10px}
+.setup-score{font-family:var(--head);font-weight:800;font-size:30px;color:#fff;letter-spacing:6px;line-height:1}
+.mode-panel{width:100%;max-width:440px;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:7px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:rgba(255,255,255,0.055)}
+.mode-chip{padding:10px 12px;border-radius:6px;font-size:12px;font-weight:800;color:#fff;background:rgba(255,255,255,0.055);border-color:rgba(255,255,255,0.16)}
+.mode-chip.active{background:#0a39d4;border-color:#4f73ff;color:#fff}
+.setup-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;width:100%;max-width:470px}
+.opt-row{display:flex;align-items:center;gap:7px;justify-content:space-between;min-width:0}
+.opt-label{font-family:var(--mono);font-size:10px;color:var(--muted);min-width:58px;text-align:right}
+.chip-row{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.chip{padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,0);transition:all .15s;min-width:38px;text-align:center}
 .chip.active{background:rgba(255,255,255,0.45);color:#fff;border-color:rgba(255,255,255,0.4)}
-.setup-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:220px}
+.mode-panel .mode-chip.active{background:#0a39d4;border-color:#4f73ff;color:#fff}
+.setup-btns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;max-width:430px}
+#btn-start{grid-column:1/-1}
 .setup-video-status{min-height:14px;margin-top:8px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
-.rnd{width:100%;padding:14px;border-radius:28px;font-family:var(--body);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:none;transition:all .12s}
+.rnd{width:100%;padding:10px 12px;border-radius:22px;font-family:var(--body);font-size:13px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;border:none;transition:all .12s}
 .rnd:active{transform:scale(0.96)}
 .rnd-start{background:#0a39d4;color:#fff}
 .rnd-end{background:#111;color:#fff;border:1px solid var(--border)}
 .rnd-red{background:#a82e15;color:#fff}
 .rnd-grey{background:#444;color:#fff}
 .rnd-blue{background:#0a39d4;color:#fff}
+.profile-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(82vw,360px);display:none;flex-direction:column;gap:10px;padding:14px;background:rgba(8,10,16,0.96);border:1px solid rgba(255,255,255,0.2);border-radius:10px;z-index:45;box-shadow:0 18px 48px rgba(0,0,0,0.8)}
+.profile-panel.on{display:flex}
+.profile-panel-title{font-family:var(--head);font-size:16px;font-weight:800;color:#fff;letter-spacing:1px;text-transform:uppercase}
+.profile-panel input{width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:10px;color:#fff;font-family:var(--head);font-size:15px;outline:none}
+.profile-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.profile-form-grid .wide{grid-column:1/-1}
+.profile-date-field{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:0 10px}
+.profile-date-label{font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.9px;color:#fff;text-transform:uppercase}
+.profile-date-field input{background:transparent;border:0;border-radius:0;padding:10px 0}
+.handed-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.handed-btn{padding:10px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:rgba(255,255,255,0.06);color:var(--muted);font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase}
+.handed-btn.active{background:#0a39d4;border-color:#4f73ff;color:#fff}
+.profile-panel-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.profile-manage-list{max-height:190px;overflow:auto;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.profile-manage-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.08)}
+.profile-manage-row:last-child{border-bottom:none}
+.profile-manage-name{font-family:var(--head);font-size:14px;font-weight:800;color:#fff}
+.profile-manage-meta{margin-top:2px;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase}
+.profile-delete-btn{padding:8px 10px;border-radius:6px;background:#3a100b;border:1px solid rgba(230,38,0,0.5);color:#ffb4a8;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.profile-empty{padding:18px 6px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase}
 
 /* ── LIBRARY ── */
 #s-library{background:var(--bg);padding:14px;gap:12px}
@@ -159,16 +188,22 @@ body.android-native-preview .timer-num{text-shadow:0 2px 8px #000}
 .mid-btn{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);padding:12px 28px;border-radius:24px;font-family:var(--body);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 #pause-btn{background:var(--R2);color:var(--R);border:1.5px solid var(--R)}
 #resume-btn{background:#0a39d4;color:#fff;display:none}
-.live-clock #pause-btn{left:45%;padding:11px 20px}
-.live-clock #resume-btn{left:55%;display:block;padding:11px 20px}
+.manual-clock #pause-btn{left:43%;bottom:22px;padding:11px 20px}
+.manual-clock #resume-btn{left:57%;bottom:22px;display:block;padding:11px 20px}
 .mid-btn:disabled{opacity:.38;transform:translateX(-50%) scale(.98)}
-.end-bout-btn{position:absolute;top:52px;left:50%;transform:translateX(-50%);display:none;padding:8px 16px;border-radius:18px;background:rgba(0,0,0,0.66);border:1px solid rgba(255,255,255,0.22);color:#fff;font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;z-index:12}
-.simple-controls{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);display:none;grid-template-columns:repeat(3,minmax(78px,1fr));gap:8px;width:min(82vw,420px);z-index:12}
+.end-bout-btn{position:absolute;top:58px;right:8px;display:none;padding:10px 14px;border-radius:20px;background:#7f1d1d;border:1px solid rgba(255,255,255,0.28);color:#fff;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;z-index:12;box-shadow:0 10px 24px rgba(0,0,0,0.55)}
+.end-confirm{right:8px;top:104px;bottom:auto;width:188px;background:rgba(0,0,0,0.9);border:1px solid rgba(255,255,255,0.22);border-radius:12px;padding:12px;box-shadow:0 16px 36px rgba(0,0,0,0.78)}
+.end-confirm .conf-btn{width:100%;border-radius:8px;padding:11px 8px;font-size:11px}
+.simple-controls{position:absolute;left:50%;bottom:94px;transform:translateX(-50%);display:none;grid-template-columns:repeat(3,minmax(76px,1fr));gap:7px;width:min(78vw,390px);z-index:12}
 .simple-controls.on{display:grid}
-.simple-btn{padding:10px 8px;border-radius:8px;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#fff;border:1px solid rgba(255,255,255,0.2);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.simple-btn{padding:10px 7px;border-radius:8px;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#fff;border:1px solid rgba(255,255,255,0.2);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .simple-hit-left{background:#0a5fa8}.simple-hit-right{background:#a8270a}
 .simple-off{background:#8a5300}.simple-review{background:#124f55}.simple-undo{background:#272d39}
 .complex-hidden{display:none!important}
+.manual-clock .cards-strip{top:43px;justify-content:center;padding:0 96px;z-index:11}
+.manual-clock .cards-l,.manual-clock .cards-r{display:none}
+.manual-clock .hint-center{flex:none;width:100%;justify-content:center}
+.manual-clock .hint-pill{max-width:min(56vw,390px);padding:6px 12px;font-size:11px}
 .confirm-wrap{position:absolute;bottom:70px;display:none;flex-direction:column;gap:10px;align-items:center;z-index:30}
 .confirm-wrap.on{display:flex}
 .confirm-wrap.left-side{left:16px}
@@ -182,6 +217,11 @@ body.android-native-preview .timer-num{text-shadow:0 2px 8px #000}
 .conf-hit{background:#15803d;color:#fff}
 .conf-offtarget{background:#92400e;color:#fff}
 .conf-label{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:1px;text-align:center}
+.simple-overturn{left:50%;bottom:68px;transform:translateX(-50%);width:min(84vw,390px);background:rgba(0,0,0,0.86);border:1px solid rgba(255,255,255,0.18);border-radius:12px;padding:12px;box-shadow:0 18px 42px rgba(0,0,0,0.78)}
+.simple-overturn.on{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.simple-overturn .conf-label{grid-column:1/-1;color:#fff}
+.simple-overturn .conf-btn{width:100%;border-radius:8px;padding:11px 6px;font-size:11px}
+.simple-overturn .wide{grid-column:1/-1}
 
 /* ── SVG RADIAL MENU ── */
 #radial-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:25;background:rgba(0,0,0,0.84);transition:opacity .2s;touch-action:none}
@@ -307,11 +347,19 @@ body.android-native-preview #import-preview{display:none!important}
   <div class="setup-col left">
     <div class="setup-avatar" id="av-l">🤺</div>
     <input class="setup-name-input" id="name-l" type="text" maxlength="18" placeholder="LEFT FENCER" autocomplete="off" spellcheck="false" list="profile-list">
+    <select class="profile-select" id="profile-select-l" data-profile-select="L" aria-label="Select left fencer">
+      <option value="">SELECT FENCER</option>
+    </select>
     <div class="profile-recent" id="profile-recent-l"></div>
+    <button class="profile-save-btn" data-profile-save="L">SAVE LEFT PROFILE</button>
     <div class="setup-side-tag">LEFT</div>
   </div>
   <div class="setup-center">
     <div class="setup-score" id="score-disp">0 — 0</div>
+    <div class="mode-panel">
+      <button class="chip mode-chip active" data-group="mode" data-val="simple">SIMPLE LIVE</button>
+      <button class="chip mode-chip" data-group="mode" data-val="complex">COMPLEX</button>
+    </div>
     <div class="setup-opts">
       <div class="opt-row">
         <span class="opt-label">WEAPON</span>
@@ -344,16 +392,11 @@ body.android-native-preview #import-preview{display:none!important}
           <button class="chip" data-group="fmt" data-val="poule">POULE</button>
         </div>
       </div>
-      <div class="opt-row">
-        <span class="opt-label">MODE</span>
-        <div class="chip-row">
-          <button class="chip active" data-group="mode" data-val="simple">SIMPLE LIVE</button>
-          <button class="chip" data-group="mode" data-val="complex">COMPLEX</button>
-        </div>
-      </div>
     </div>
     <div class="setup-btns">
       <button class="rnd rnd-start" id="btn-start">▶ CREATE BOUT</button>
+      <button class="rnd rnd-end" id="btn-register-profile">＋ REGISTER FENCER</button>
+      <button class="rnd rnd-end" id="btn-manage-profiles">MANAGE FENCERS</button>
       <button class="rnd rnd-end" id="btn-swap-sides">⇄ SWAP SIDES</button>
       <button class="rnd rnd-end" id="btn-import-video">⬆ IMPORT VIDEO</button>
       <button class="rnd rnd-end" id="btn-library">▶ BOUT LIBRARY</button>
@@ -361,11 +404,42 @@ body.android-native-preview #import-preview{display:none!important}
       <input type="file" id="file-input" accept=".json" style="display:none">
     </div>
     <div class="setup-video-status" id="setup-video-status"></div>
+    <div class="profile-panel" id="profile-register-panel">
+      <div class="profile-panel-title">REGISTER FENCER</div>
+      <div class="profile-form-grid">
+        <input id="profile-register-first" type="text" maxlength="18" placeholder="FIRST NAME" autocomplete="off" spellcheck="false">
+        <input id="profile-register-last" type="text" maxlength="18" placeholder="LAST NAME" autocomplete="off" spellcheck="false">
+        <label class="profile-date-field wide" for="profile-register-dob">
+          <span class="profile-date-label">DOB</span>
+          <input id="profile-register-dob" type="date" aria-label="Date of birth">
+        </label>
+        <div class="handed-row wide">
+          <button class="handed-btn active" data-profile-handed="right">RIGHT HANDED</button>
+          <button class="handed-btn" data-profile-handed="left">LEFT HANDED</button>
+        </div>
+      </div>
+      <div class="profile-panel-actions">
+        <button class="rnd rnd-blue" id="profile-register-save">SAVE</button>
+        <button class="rnd rnd-end" id="profile-register-cancel">CANCEL</button>
+      </div>
+    </div>
+    <div class="profile-panel" id="profile-manage-panel">
+      <div class="profile-panel-title">MANAGE FENCERS</div>
+      <div class="profile-manage-list" id="profile-manage-list"></div>
+      <div class="profile-panel-actions">
+        <button class="rnd rnd-blue" id="profile-manage-new">REGISTER</button>
+        <button class="rnd rnd-end" id="profile-manage-close">CLOSE</button>
+      </div>
+    </div>
   </div>
   <div class="setup-col right">
     <div class="setup-avatar" id="av-r">🤺</div>
     <input class="setup-name-input" id="name-r" type="text" maxlength="18" placeholder="RIGHT FENCER" autocomplete="off" spellcheck="false" list="profile-list">
+    <select class="profile-select" id="profile-select-r" data-profile-select="R" aria-label="Select right fencer">
+      <option value="">SELECT FENCER</option>
+    </select>
     <div class="profile-recent" id="profile-recent-r"></div>
+    <button class="profile-save-btn" data-profile-save="R">SAVE RIGHT PROFILE</button>
     <div class="setup-side-tag">RIGHT</div>
   </div>
   <datalist id="profile-list"></datalist>
@@ -457,6 +531,11 @@ body.android-native-preview #import-preview{display:none!important}
     <button class="mid-btn" id="pause-btn">HALT</button>
     <button class="mid-btn" id="resume-btn">FENCE</button>
     <button class="end-bout-btn" id="end-bout-btn">END BOUT</button>
+    <div class="confirm-wrap end-confirm" id="end-bout-confirm">
+      <div class="conf-label">END BOUT?</div>
+      <button class="conf-btn conf-hit" id="end-bout-yes">END BOUT</button>
+      <button class="conf-btn conf-cancel" id="end-bout-no">CANCEL</button>
+    </div>
 
     <!-- Confirm overlays -->
     <div class="confirm-wrap left-side" id="conf-l">
@@ -481,6 +560,15 @@ body.android-native-preview #import-preview{display:none!important}
       <button class="conf-btn conf-offtarget" id="ovr-annul">🚫 NO TOUCH</button>
       <button class="conf-btn conf-confirm"   id="ovr-reclass">✏ RE-CLASSIFY</button>
       <button class="conf-btn conf-cancel"    id="ovr-cancel">✕ CANCEL</button>
+    </div>
+    <div class="confirm-wrap simple-overturn" id="simple-overturn-chooser">
+      <div class="conf-label">OVERTURN — SIMPLE LIVE</div>
+      <button class="conf-btn simple-hit-left" id="sov-left-hit">LEFT HIT</button>
+      <button class="conf-btn simple-hit-right" id="sov-right-hit">RIGHT HIT</button>
+      <button class="conf-btn simple-off" id="sov-left-off">LEFT OFF</button>
+      <button class="conf-btn simple-off" id="sov-right-off">RIGHT OFF</button>
+      <button class="conf-btn conf-offtarget wide" id="sov-annul">NO TOUCH</button>
+      <button class="conf-btn conf-cancel wide" id="sov-cancel">CANCEL</button>
     </div>
   </div>
 
@@ -780,6 +868,25 @@ function normalizedName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ');
 }
 
+function splitProfileName(name) {
+  const clean = normalizedName(name);
+  if (!clean) return { firstName: '', lastName: '' };
+  const parts = clean.split(' ');
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') };
+}
+
+function profileDisplayName(profile) {
+  const first = normalizedName(profile && profile.firstName);
+  const last = normalizedName(profile && profile.lastName);
+  return normalizedName(`${first} ${last}`) || normalizedName(profile && profile.name);
+}
+
+function normalizedHandedness(value) {
+  const v = String(value || '').toLowerCase();
+  if (v === 'left' || v === 'right') return v;
+  return '';
+}
+
 function readFencerIndex() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORE_FENCER_INDEX_KEY) || '[]');
@@ -808,11 +915,15 @@ function loadFencerProfile(id) {
 
 function writeFencerProfile(profile) {
   if (!profile || !profile.id) return null;
+  profile.name = profileDisplayName(profile);
   profile.updatedAt = Date.now();
   localStorage.setItem(fencerKey(profile.id), JSON.stringify(profile));
   const row = {
     id: profile.id,
     name: profile.name,
+    firstName: profile.firstName || '',
+    lastName: profile.lastName || '',
+    dob: profile.dob || '',
     club: profile.club || '',
     handedness: profile.handedness || '',
     boutCount: Number(profile.boutCount) || 0,
@@ -835,16 +946,21 @@ function profileByName(name) {
 }
 
 function ensureFencerProfile(name, preferredId) {
-  const clean = normalizedName(name);
+  const input = typeof name === 'object' && name !== null ? name : { name };
+  const clean = profileDisplayName(input);
   if (!clean) return null;
   let profile = loadFencerProfile(preferredId) || profileByName(clean);
+  const parts = splitProfileName(clean);
   if (!profile) {
     profile = {
       id: uuid(),
       clientId: clientId(),
       name: clean,
+      firstName: normalizedName(input.firstName) || parts.firstName,
+      lastName: normalizedName(input.lastName) || parts.lastName,
+      dob: String(input.dob || ''),
       club: '',
-      handedness: '',
+      handedness: normalizedHandedness(input.handedness),
       boutCount: 0,
       matchIds: [],
       createdAt: Date.now(),
@@ -853,9 +969,26 @@ function ensureFencerProfile(name, preferredId) {
     };
   }
   profile.name = clean;
+  profile.firstName = normalizedName(input.firstName) || profile.firstName || parts.firstName;
+  profile.lastName = normalizedName(input.lastName) || profile.lastName || parts.lastName;
+  if (input.dob !== undefined) profile.dob = String(input.dob || '');
+  else if (profile.dob === undefined) profile.dob = '';
+  if (input.handedness !== undefined) profile.handedness = normalizedHandedness(input.handedness);
+  else if (profile.handedness === undefined) profile.handedness = '';
   profile.lastUsedAt = Date.now();
   if (!Array.isArray(profile.matchIds)) profile.matchIds = [];
   return writeFencerProfile(profile);
+}
+
+function deleteFencerProfile(id) {
+  if (!id) return;
+  localStorage.removeItem(fencerKey(id));
+  localStorage.removeItem(lessonLedgerKey(id));
+  writeFencerIndex(readFencerIndex().filter(row => row && row.id !== id));
+  if (_selectedProfiles.L === id) _selectedProfiles.L = null;
+  if (_selectedProfiles.R === id) _selectedProfiles.R = null;
+  renderProfilePickers();
+  renderProfileManager();
 }
 
 function attachMatchToFencer(profileId, matchId) {
@@ -891,12 +1024,20 @@ function renderProfilePickers() {
   const datalist = document.getElementById('profile-list');
   if (datalist) datalist.innerHTML = rows.map(row => `<option value="${escapeHtml(row.name)}"></option>`).join('');
   ['L', 'R'].forEach(side => {
+    const select = document.getElementById(side === 'L' ? 'profile-select-l' : 'profile-select-r');
+    if (select) {
+      select.innerHTML = '<option value="">SELECT FENCER</option>' + rows
+        .map(row => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}</option>`)
+        .join('');
+      select.value = _selectedProfiles[side] || '';
+    }
     const wrap = document.getElementById(side === 'L' ? 'profile-recent-l' : 'profile-recent-r');
     if (!wrap) return;
-    wrap.innerHTML = rows.slice(0, 4)
+    wrap.innerHTML = rows.slice(0, 3)
       .map(row => `<button class="profile-chip" data-profile-side="${side}" data-profile-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button>`)
       .join('');
   });
+  renderProfileManager();
 }
 
 function selectFencerProfile(side, id) {
@@ -905,6 +1046,32 @@ function selectFencerProfile(side, id) {
   _selectedProfiles[side] = profile.id;
   const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
   if (input) input.value = profile.name;
+  const select = document.getElementById(side === 'L' ? 'profile-select-l' : 'profile-select-r');
+  if (select) select.value = profile.id;
+}
+
+function renderProfileManager() {
+  const list = document.getElementById('profile-manage-list');
+  if (!list) return;
+  const rows = readFencerIndex();
+  if (!rows.length) {
+    list.innerHTML = '<div class="profile-empty">No fencers registered yet.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(row => {
+    const details = [
+      row.dob ? `DOB ${escapeHtml(row.dob)}` : '',
+      row.handedness ? `${escapeHtml(row.handedness)} handed` : '',
+      `${Number(row.boutCount) || 0} bouts`,
+    ].filter(Boolean).join(' · ');
+    return `<div class="profile-manage-row" data-profile-id="${escapeHtml(row.id)}">
+      <div>
+        <div class="profile-manage-name">${escapeHtml(row.name)}</div>
+        <div class="profile-manage-meta">${details}</div>
+      </div>
+      <button class="profile-delete-btn" data-profile-delete="${escapeHtml(row.id)}">DELETE</button>
+    </div>`;
+  }).join('');
 }
 
 function lessonLedgerKey(fencerId) {
@@ -1143,8 +1310,12 @@ function isLiveMode() {
   return !!(M && M.captureMode === 'simple');
 }
 
+function usesManualClock() {
+  return !!(M && !isImportedVideoAnnotationMode());
+}
+
 function shouldAutoResumeAfterEntry() {
-  return !!(M && !M.finished && !isLiveMode());
+  return !!(M && !M.finished && !usesManualClock());
 }
 
 function resumeAfterEntryIfNeeded() {
@@ -1154,9 +1325,12 @@ function resumeAfterEntryIfNeeded() {
 
 function updateCaptureModeUI() {
   const live = isLiveMode();
+  const manualClock = usesManualClock();
   const root = document.getElementById('operate');
   if (root) root.classList.toggle('live-clock', live);
+  if (root) root.classList.toggle('manual-clock', manualClock);
   document.getElementById('simple-controls').classList.toggle('on', live);
+  document.getElementById('end-bout-confirm').classList.remove('on');
   ['btn-act-l', 'btn-act-r', 'btn-foul-l', 'btn-foul-r', 'btn-chal-l', 'btn-chal-r'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('complex-hidden', live);
@@ -1177,7 +1351,7 @@ function updateClockControls() {
     end.style.display = 'none';
     return;
   }
-  if (isLiveMode()) {
+  if (usesManualClock()) {
     halt.textContent = 'HALT';
     fence.textContent = 'FENCE';
     halt.style.display = 'block';
@@ -1208,6 +1382,18 @@ function haltClock(message = 'Halted. Tap FENCE to restart time.') {
   stopTimer();
   showScreen('s-match');
   setOverlayStatus(message, false);
+}
+
+function showEndBoutConfirm() {
+  if (!M || M.finished) return;
+  stopTimer();
+  document.getElementById('end-bout-confirm').classList.add('on');
+  updateClockControls();
+}
+
+function hideEndBoutConfirm() {
+  document.getElementById('end-bout-confirm').classList.remove('on');
+  updateClockControls();
 }
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
@@ -1325,7 +1511,7 @@ async function clickStart() {
   }
   updateImportedVideoModeUI();
   updateCaptureModeUI();
-  if (isImportedVideoAnnotationMode() && !isLiveMode()) {
+  if (isImportedVideoAnnotationMode() && !usesManualClock()) {
     // Gamified annotation: the video is the match. No countdown - playback
     // starts immediately and the clock follows the video position.
     _importSpeed = 1;
@@ -1334,7 +1520,7 @@ async function clickStart() {
     return;
   }
   await prepareRecordingBeforeStart();
-  if (!isLiveMode()) {
+  if (!usesManualClock()) {
     runCountdown(() => {
       showScreen('s-match');
       updateClockControls();
@@ -1365,7 +1551,7 @@ function showResultScreen(title) {
   document.getElementById('res-stats-r').textContent =
     `H:${M.events.filter(e=>e.side==='R'&&e.isHit).length} ` +
     `Cards:${M.cardsR.length}`;
-  document.getElementById('res-resume').textContent = isLiveMode() ? 'FENCE' : '▶ RESUME';
+  document.getElementById('res-resume').textContent = usesManualClock() ? 'FENCE' : '▶ RESUME';
   document.getElementById('res-resume').style.display = M.finished ? 'none' : 'block';
   document.getElementById('res-end').style.display    = M.finished ? 'none' : 'block';
   document.getElementById('res-new').style.display    = M.finished ? 'block' : 'none';
@@ -1374,7 +1560,7 @@ function showResultScreen(title) {
 
 document.getElementById('pause-btn').addEventListener('touchend', e => {
   e.preventDefault();
-  if (isLiveMode()) {
+  if (usesManualClock()) {
     haltClock();
     return;
   }
@@ -1396,9 +1582,20 @@ document.getElementById('resume-btn').addEventListener('touchend', e => {
 document.getElementById('end-bout-btn').addEventListener('touchend', e => {
   e.preventDefault();
   if (!M || M.finished) return;
-  if (!confirm('End this bout?')) return;
+  showEndBoutConfirm();
+}, {passive:false});
+
+document.getElementById('end-bout-yes').addEventListener('touchend', e => {
+  e.preventDefault();
+  if (!M || M.finished) return;
+  hideEndBoutConfirm();
   stopTimer();
   finishMatch();
+}, {passive:false});
+
+document.getElementById('end-bout-no').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideEndBoutConfirm();
 }, {passive:false});
 
 document.getElementById('res-simul').addEventListener('touchend', e => {
@@ -1941,15 +2138,27 @@ function returnToVideoReviewAfterCorrectionCancel() {
 function showOverturnChooser() {
   const index = eventIndexById(_reviewEditId);
   if (index < 0) return;
+  if (isLiveMode()) {
+    showSimpleOverturnChooser();
+    return;
+  }
   const ev = M.events[index];
   const otherName = ev.side === 'L' ? (M.nameR || 'RIGHT') : (M.nameL || 'LEFT');
   document.getElementById('ovr-other').textContent = `🎯 TOUCH TO ${otherName}`;
+  document.getElementById('simple-overturn-chooser').classList.remove('on');
   document.getElementById('overturn-chooser').classList.add('on');
   setOverlayStatus('Call overturned — choose what actually happened.', false);
 }
 
+function showSimpleOverturnChooser() {
+  document.getElementById('overturn-chooser').classList.remove('on');
+  document.getElementById('simple-overturn-chooser').classList.add('on');
+  setOverlayStatus('Choose the simple corrected call.', false);
+}
+
 function hideOverturnChooser() {
   document.getElementById('overturn-chooser').classList.remove('on');
+  document.getElementById('simple-overturn-chooser').classList.remove('on');
 }
 
 // The video review itself is a match event: keep it in the timeline so the
@@ -2036,6 +2245,54 @@ document.getElementById('ovr-reclass').addEventListener('touchend', e => {
   setOverlayStatus('Choose corrected fencer and action.', false);
 }, {passive:false});
 document.getElementById('ovr-cancel').addEventListener('touchend', e => {
+  e.preventDefault();
+  returnToVideoReviewAfterCorrectionCancel();
+}, {passive:false});
+
+function applySimpleOverturn(side, outcome) {
+  const index = eventIndexById(_reviewEditId);
+  if (index < 0) {
+    hideOverturnChooser();
+    _reviewEditId = null;
+    _reviewEditMeta = null;
+    return;
+  }
+  const old = M.events[index];
+  const hit = outcome === 'hit';
+  const actionId = hit
+    ? (side === 'L' ? 105 : 205)
+    : (side === 'L' ? 140 : 240);
+  if (!_reviewEditMeta) _reviewEditMeta = {};
+  _reviewEditMeta.overturnOutcome =
+    hit && side !== old.side ? 'awarded-other'
+      : hit && side === old.side && old.isHit ? 'reclassified'
+      : 'changed-to-offtarget';
+  hideOverturnChooser();
+  doConfirm(side, actionId, hit, {
+    entryMode: 'simple',
+    outcome: hit ? 'hit' : 'offTarget',
+    callClass: 'unknown',
+  });
+}
+
+document.getElementById('sov-left-hit').addEventListener('touchend', e => {
+  e.preventDefault(); applySimpleOverturn('L', 'hit');
+}, {passive:false});
+document.getElementById('sov-right-hit').addEventListener('touchend', e => {
+  e.preventDefault(); applySimpleOverturn('R', 'hit');
+}, {passive:false});
+document.getElementById('sov-left-off').addEventListener('touchend', e => {
+  e.preventDefault(); applySimpleOverturn('L', 'offTarget');
+}, {passive:false});
+document.getElementById('sov-right-off').addEventListener('touchend', e => {
+  e.preventDefault(); applySimpleOverturn('R', 'offTarget');
+}, {passive:false});
+document.getElementById('sov-annul').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideOverturnChooser();
+  applyAnnulOverturn();
+}, {passive:false});
+document.getElementById('sov-cancel').addEventListener('touchend', e => {
   e.preventDefault();
   returnToVideoReviewAfterCorrectionCancel();
 }, {passive:false});
@@ -2139,7 +2396,7 @@ document.getElementById('simple-undo').addEventListener('touchend', e => {
 // ── doConfirm — record action, update state ───────────────────────────────────
 function doConfirm(side, actionId, isHit, meta = {}) {
   if (!M || M.finished) return;
-  if (isLiveMode()) stopTimer();
+  if (usesManualClock()) stopTimer();
   const action    = ACTIONS[actionId];
   const ts        = M.periodDuration - M.timerSec;
   const scored    = isHit === undefined ? (action ? action.isHit : false) : isHit;
@@ -2182,9 +2439,9 @@ function doConfirm(side, actionId, isHit, meta = {}) {
       isHit: ev.isHit,
       reviewed: true,
       reviewedAt: Date.now(),
-      // Awarding the touch to the other fencer overturns the call; a plain
+      // Awarding/changing the outcome overturns the call; a plain
       // re-classification means the call stood but the label was wrong.
-      reviewStatus: overturnOutcome === 'awarded-other' ? 'overturned' : 'corrected',
+      reviewStatus: overturnOutcome && overturnOutcome !== 'reclassified' ? 'overturned' : 'corrected',
       ...(overturnOutcome ? { overturnOutcome } : {}),
       originalActionId,
       originalLabel,
@@ -2205,7 +2462,7 @@ function doConfirm(side, actionId, isHit, meta = {}) {
     if (typeof scheduleSave === 'function') scheduleSave();
     buildReport();
     recordReviewOutcomeEvent(M.events[editedIndex],
-      overturnOutcome === 'awarded-other' ? 'overturned:awarded-other' : 'corrected');
+      overturnOutcome && overturnOutcome !== 'reclassified' ? `overturned:${overturnOutcome}` : 'corrected');
     // The decision is made: return to the match. Drop the cached review source -
     // the next review must see the newest footage.
     _reviewStartedFromRecording = false;
@@ -4179,7 +4436,7 @@ window.onAndroidVideoReviewKeep = function(payloadJson) {
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    restartNativeRecordingAfterReview({ resumeTimer: !isLiveMode() });
+    restartNativeRecordingAfterReview({ resumeTimer: !usesManualClock() });
   } else if (_resumeImportedAfterVideoReview) {
     _resumeImportedAfterVideoReview = false;
     resumeAfterEntryIfNeeded();
@@ -4251,7 +4508,7 @@ window.onAndroidVideoReviewClose = function() {
   if (_resumeRecordingAfterVideoReview) {
     _reviewStartedFromRecording = false;
     _activeVideoReviewSource = null;
-    restartNativeRecordingAfterReview({ resumeTimer: !isLiveMode() });
+    restartNativeRecordingAfterReview({ resumeTimer: !usesManualClock() });
   } else if (_resumeImportedAfterVideoReview) {
     _resumeImportedAfterVideoReview = false;
     resumeAfterEntryIfNeeded();
@@ -4550,7 +4807,20 @@ document.querySelectorAll('.chip').forEach(btn => {
   input.addEventListener('input', () => {
     const profile = profileByName(input.value);
     _selectedProfiles[side] = profile ? profile.id : null;
+    const select = document.getElementById(side === 'L' ? 'profile-select-l' : 'profile-select-r');
+    if (select) select.value = profile ? profile.id : '';
   });
+});
+
+document.getElementById('s-setup').addEventListener('change', e => {
+  const select = e.target.closest('[data-profile-select]');
+  if (!select) return;
+  const side = select.dataset.profileSelect;
+  if (!select.value) {
+    _selectedProfiles[side] = null;
+    return;
+  }
+  selectFencerProfile(side, select.value);
 });
 
 document.getElementById('s-setup').addEventListener('touchend', e => {
@@ -4558,6 +4828,134 @@ document.getElementById('s-setup').addEventListener('touchend', e => {
   if (!chip) return;
   e.preventDefault();
   selectFencerProfile(chip.dataset.profileSide, chip.dataset.profileId);
+}, {passive:false});
+
+document.getElementById('s-setup').addEventListener('touchend', e => {
+  const btn = e.target.closest('[data-profile-save]');
+  if (!btn) return;
+  e.preventDefault();
+  const side = btn.dataset.profileSave;
+  const input = document.getElementById(side === 'L' ? 'name-l' : 'name-r');
+  const name = normalizedName(input && input.value);
+  if (!name) {
+    setImportVideoStatus('Enter a fencer name first.');
+    return;
+  }
+  const profile = ensureFencerProfile(name, _selectedProfiles[side]);
+  _selectedProfiles[side] = profile ? profile.id : null;
+  renderProfilePickers();
+  setImportVideoStatus(`${name} profile saved.`);
+}, {passive:false});
+
+function showProfileRegisterPanel(prefill = '') {
+  hideProfileManagePanel();
+  const panel = document.getElementById('profile-register-panel');
+  const parts = splitProfileName(prefill);
+  const first = document.getElementById('profile-register-first');
+  const last = document.getElementById('profile-register-last');
+  document.getElementById('profile-register-dob').value = '';
+  first.value = parts.firstName;
+  last.value = parts.lastName;
+  document.querySelectorAll('[data-profile-handed]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.profileHanded === 'right');
+  });
+  panel.classList.add('on');
+  setTimeout(() => first.focus(), 0);
+}
+
+function hideProfileRegisterPanel() {
+  document.getElementById('profile-register-panel').classList.remove('on');
+}
+
+function showProfileManagePanel() {
+  hideProfileRegisterPanel();
+  renderProfileManager();
+  document.getElementById('profile-manage-panel').classList.add('on');
+}
+
+function hideProfileManagePanel() {
+  document.getElementById('profile-manage-panel').classList.remove('on');
+}
+
+function selectedRegisterHandedness() {
+  const active = document.querySelector('[data-profile-handed].active');
+  return active ? active.dataset.profileHanded : 'right';
+}
+
+function saveRegisteredProfile() {
+  const firstName = normalizedName(document.getElementById('profile-register-first').value);
+  const lastName = normalizedName(document.getElementById('profile-register-last').value);
+  const dob = document.getElementById('profile-register-dob').value;
+  if (!firstName || !lastName) {
+    setImportVideoStatus('Enter first and last name.');
+    return;
+  }
+  const profile = ensureFencerProfile({
+    firstName,
+    lastName,
+    dob,
+    handedness: selectedRegisterHandedness(),
+  }, null);
+  renderProfilePickers();
+  hideProfileRegisterPanel();
+  setImportVideoStatus(`${profile.name} profile registered.`);
+}
+
+document.getElementById('btn-register-profile').addEventListener('touchend', e => {
+  e.preventDefault();
+  showProfileRegisterPanel();
+}, {passive:false});
+
+document.getElementById('btn-manage-profiles').addEventListener('touchend', e => {
+  e.preventDefault();
+  showProfileManagePanel();
+}, {passive:false});
+
+document.getElementById('profile-register-panel').addEventListener('touchend', e => {
+  const btn = e.target.closest('[data-profile-handed]');
+  if (!btn) return;
+  e.preventDefault();
+  document.querySelectorAll('[data-profile-handed]').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+}, {passive:false});
+
+document.getElementById('profile-register-save').addEventListener('touchend', e => {
+  e.preventDefault();
+  saveRegisteredProfile();
+}, {passive:false});
+
+document.getElementById('profile-register-cancel').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideProfileRegisterPanel();
+}, {passive:false});
+
+document.getElementById('profile-manage-new').addEventListener('touchend', e => {
+  e.preventDefault();
+  showProfileRegisterPanel();
+}, {passive:false});
+
+document.getElementById('profile-manage-close').addEventListener('touchend', e => {
+  e.preventDefault();
+  hideProfileManagePanel();
+}, {passive:false});
+
+document.getElementById('profile-manage-list').addEventListener('touchend', e => {
+  const btn = e.target.closest('[data-profile-delete]');
+  if (!btn) return;
+  e.preventDefault();
+  if (btn.dataset.confirmDelete === '1') {
+    const row = btn.closest('[data-profile-id]');
+    const name = row ? row.querySelector('.profile-manage-name').textContent : 'Fencer';
+    deleteFencerProfile(btn.dataset.profileDelete);
+    setImportVideoStatus(`${name} deleted.`);
+    return;
+  }
+  document.querySelectorAll('[data-profile-delete]').forEach(el => {
+    el.dataset.confirmDelete = '0';
+    el.textContent = 'DELETE';
+  });
+  btn.dataset.confirmDelete = '1';
+  btn.textContent = 'CONFIRM';
 }, {passive:false});
 
 document.getElementById('btn-swap-sides').addEventListener('touchend', e => {
@@ -4570,6 +4968,7 @@ document.getElementById('btn-swap-sides').addEventListener('touchend', e => {
   const leftProfile = _selectedProfiles.L;
   _selectedProfiles.L = _selectedProfiles.R;
   _selectedProfiles.R = leftProfile;
+  renderProfilePickers();
 }, {passive:false});
 
 renderProfilePickers();

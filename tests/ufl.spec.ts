@@ -30,16 +30,25 @@ const startMatch = async (page: Page, opts: { fence?: boolean; mode?: 'simple' |
     await page.locator(`[data-group="mode"][data-val="${mode}"]`).tap();
   }
   await page.locator('#btn-start').tap();
+  await expect.poll(() => page.evaluate(() => typeof M !== 'undefined' && !!M), { timeout: 5000 }).toBe(true);
+  if (!isAndroidApp && opts.fence !== false) {
+    await page.evaluate(() => {
+      if (typeof showScreen === 'function') showScreen('s-match');
+      if (M && !M.running && typeof startTimer === 'function') startTimer();
+    });
+    await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
+    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 5000 }).toBe(true);
+    return;
+  }
   await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
   if (opts.fence === false) return;
-  if (!(isAndroidApp && mode === 'simple')) {
-    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 6000 }).toBe(true);
-    await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
-  }
   const fence = page.locator('#resume-btn');
   if (await fence.isVisible().catch(() => false)) {
     await fence.tap();
     await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 5000 }).toBe(true);
+  } else {
+    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 6000 }).toBe(true);
+    await expect(page.locator('#s-match.active')).toBeVisible({ timeout: 5000 });
   }
 };
 
@@ -248,7 +257,75 @@ test.describe('UX-1 persistence', () => {
 });
 
 test.describe('android live UX foundation', () => {
+  test('setup exposes mode selection, scrolling, and explicit profile save', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await expect(page.locator('.mode-panel')).toBeVisible();
+    await expect(page.locator('.mode-chip[data-val="simple"]')).toBeVisible();
+    await expect(page.locator('.mode-chip[data-val="complex"]')).toBeVisible();
+    await expect(page.locator('#btn-register-profile')).toBeVisible();
+
+    const setupOverflow = await page.locator('#s-setup').evaluate(el => getComputedStyle(el).overflowY);
+    expect(setupOverflow).toBe('auto');
+
+    await page.locator('#btn-register-profile').tap();
+    await expect(page.locator('#profile-register-panel')).toHaveClass(/on/);
+    await expect(page.locator('.profile-date-label')).toHaveText('DOB');
+    await page.locator('#profile-register-first').fill('Jordan');
+    await page.locator('#profile-register-last').fill('Smith');
+    await page.locator('#profile-register-dob').fill('2012-04-18');
+    await page.locator('[data-profile-handed="left"]').tap();
+    await page.locator('#profile-register-save').tap();
+    await expect(page.locator('#setup-video-status')).toContainText('Jordan Smith profile registered');
+
+    await page.locator('#name-l').fill('Casey Park');
+    await page.locator('[data-profile-save="L"]').tap();
+    await expect(page.locator('#setup-video-status')).toContainText('Casey Park profile saved');
+    const profiles = await page.evaluate(() => JSON.parse(localStorage.getItem('ufl:fencer:index') || '[]'));
+    expect(profiles.map((p: any) => p.name)).toEqual(expect.arrayContaining(['Casey Park', 'Jordan Smith']));
+    const jordan = profiles.find((p: any) => p.name === 'Jordan Smith');
+    expect(jordan).toMatchObject({
+      firstName: 'Jordan',
+      lastName: 'Smith',
+      dob: '2012-04-18',
+      handedness: 'left',
+    });
+    await expect(page.locator('#profile-select-l')).toBeVisible();
+    await expect(page.locator('#profile-select-r')).toBeVisible();
+    await page.locator('#profile-select-r').selectOption(jordan.id);
+    await expect(page.locator('#name-r')).toHaveValue('Jordan Smith');
+    await expect(page.locator('#profile-select-r')).toHaveValue(jordan.id);
+    const recentFontSize = await page.locator('#profile-recent-r .profile-chip').first()
+      .evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    expect(recentFontSize).toBeGreaterThanOrEqual(10);
+
+    await page.locator('#btn-manage-profiles').tap();
+    await expect(page.locator('#profile-manage-panel')).toHaveClass(/on/);
+    const jordanRow = page.locator('.profile-manage-row').filter({ hasText: 'Jordan Smith' });
+    await expect(jordanRow).toContainText('DOB 2012-04-18');
+    await expect(jordanRow).toContainText(/left handed/i);
+    await page.evaluate((profileId: string) => {
+      (window as any).recordLessonProgress(profileId, 'footwork.advance');
+    }, jordan.id);
+    await jordanRow.locator('[data-profile-delete]').tap();
+    await expect(jordanRow.locator('[data-profile-delete]')).toHaveText('CONFIRM');
+    await jordanRow.locator('[data-profile-delete]').tap();
+    await expect(page.locator('#setup-video-status')).toContainText('Jordan Smith deleted');
+    const afterDelete = await page.evaluate((profileId: string) => ({
+      index: JSON.parse(localStorage.getItem('ufl:fencer:index') || '[]'),
+      detailKeys: Object.keys(localStorage).filter(k => k.startsWith('ufl:fencer:') && k !== 'ufl:fencer:index'),
+      deletedLedger: localStorage.getItem(`ufl:lesson-ledger:${profileId}`),
+    }), jordan.id);
+    expect(afterDelete.index.map((p: any) => p.name)).not.toContain('Jordan Smith');
+    expect(afterDelete.detailKeys.length).toBe(1);
+    expect(afterDelete.deletedLedger).toBeNull();
+  });
+
   test('creates an armed live bout and only starts the clock on FENCE', async ({ page }) => {
+    const dialogs: string[] = [];
+    page.on('dialog', dialog => {
+      dialogs.push(dialog.message());
+      return dialog.dismiss();
+    });
     await page.goto(ANDROID_APP_PATH);
     await page.locator('#name-l').fill('ALICE');
     await page.locator('#name-r').fill('BOB');
@@ -276,6 +353,12 @@ test.describe('android live UX foundation', () => {
     await page.waitForTimeout(1200);
     expect(parseTimer(await page.locator('#timer-disp').innerText())).toBe(halted);
     expect(await page.evaluate(() => M.running)).toBe(false);
+
+    await page.locator('#end-bout-btn').tap();
+    await expect(page.locator('#end-bout-confirm')).toHaveClass(/on/);
+    expect(dialogs).toEqual([]);
+    await page.locator('#end-bout-no').tap();
+    await expect(page.locator('#end-bout-confirm')).not.toHaveClass(/(^|\s)on(\s|$)/);
   });
 
   test('simple hit and off-target capture leave the live clock halted', async ({ page }) => {
@@ -313,13 +396,60 @@ test.describe('android live UX foundation', () => {
     expect(await page.evaluate(() => M.running)).toBe(false);
   });
 
+  test('simple live overturn uses simple corrected-call buttons', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page, { mode: 'simple' });
+    await page.locator('#simple-left-hit').tap();
+
+    await page.evaluate(() => {
+      _reviewEditId = M.events[0].id;
+      _reviewEditMeta = { chosenBoutTime: M.events[0].ts };
+      showOverturnChooser();
+    });
+
+    await expect(page.locator('#simple-overturn-chooser')).toHaveClass(/on/);
+    await expect(page.locator('#radial-overlay')).toBeHidden();
+    await page.locator('#sov-right-hit').tap();
+
+    const data = await page.evaluate(() => ({
+      scoreL: M.scoreL,
+      scoreR: M.scoreR,
+      event: M.events[0],
+      review: M.events.find((ev: any) => ev.actionId === 3),
+      running: M.running,
+      radialDisplay: getComputedStyle(document.getElementById('radial-overlay')!).display,
+    }));
+
+    expect(data.scoreL).toBe(0);
+    expect(data.scoreR).toBe(1);
+    expect(data.event).toMatchObject({
+      side: 'R',
+      actionId: 205,
+      entryMode: 'simple',
+      outcome: 'hit',
+      reviewStatus: 'overturned',
+      overturnOutcome: 'awarded-other',
+    });
+    expect(data.review.reviewOutcome).toBe('overturned:awarded-other');
+    expect(data.running).toBe(false);
+    expect(data.radialDisplay).toBe('none');
+  });
+
   test('profiles, side swap, match profile ids, and lesson ledger persist', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await page.locator('#name-l').fill('Alice Lee');
     await page.locator('#name-r').fill('Bob Kim');
+    await page.locator('[data-profile-save="L"]').tap();
+    await page.locator('[data-profile-save="R"]').tap();
+    const selectedBeforeSwap = await page.evaluate(() => ({
+      left: (document.getElementById('profile-select-l') as HTMLSelectElement).value,
+      right: (document.getElementById('profile-select-r') as HTMLSelectElement).value,
+    }));
     await page.locator('#btn-swap-sides').tap();
     await expect(page.locator('#name-l')).toHaveValue('Bob Kim');
     await expect(page.locator('#name-r')).toHaveValue('Alice Lee');
+    await expect(page.locator('#profile-select-l')).toHaveValue(selectedBeforeSwap.right);
+    await expect(page.locator('#profile-select-r')).toHaveValue(selectedBeforeSwap.left);
 
     await page.locator('#btn-start').tap();
     await expect(page.locator('#s-match.active')).toBeVisible();
@@ -353,6 +483,17 @@ test.describe('android live UX foundation', () => {
 
     await expect(page.locator('#simple-controls')).not.toHaveClass(/(^|\s)on(\s|$)/);
     await expect(page.locator('#btn-act-l')).toBeVisible();
+    await expect(page.locator('#resume-btn')).toHaveText('FENCE');
+    await expect(page.locator('#pause-btn')).toHaveText('HALT');
+    await expect(page.locator('#resume-btn')).toBeEnabled();
+    await expect(page.locator('#pause-btn')).toBeDisabled();
+    expect(await page.evaluate(() => M.running)).toBe(false);
+    const armed = parseTimer(await page.locator('#timer-disp').innerText());
+    await page.waitForTimeout(1200);
+    expect(parseTimer(await page.locator('#timer-disp').innerText())).toBe(armed);
+    await page.locator('#resume-btn').tap();
+    await expect.poll(() => page.evaluate(() => !!(M && M.running)), { timeout: 5000 }).toBe(true);
+    await expect(page.locator('#pause-btn')).toBeEnabled();
     const taxonomy = await page.evaluate(() => ({
       offense: RADIAL_DEFS.OFFENSE.sectors.map((s: any) => s.label),
       defense: RADIAL_DEFS.DEF_ROW.sectors.map((s: any) => s.label),
@@ -1068,6 +1209,10 @@ test.describe('native video review', () => {
       (window as any).doConfirm('L', 103, true);
       await new Promise(resolve => setTimeout(resolve, 320));
       const running = M.running;
+      const openPause = _recPauseOpen ? { ..._recPauseOpen } : null;
+      (window as any).fenceClock();
+      const runningAfterFence = M.running;
+      const restartPauses = M.recordingPauses;
       if (_timerInterval) {
         clearInterval(_timerInterval);
         _timerInterval = null;
@@ -1085,8 +1230,10 @@ test.describe('native video review', () => {
         scoreL: M.scoreL,
         scoreR: M.scoreR,
         running,
+        runningAfterFence,
         corrected: M.events[1],
-        restartPauses: M.recordingPauses,
+        openPause,
+        restartPauses,
       };
     });
 
@@ -1104,11 +1251,14 @@ test.describe('native video review', () => {
     expect(result.reviewPayloads[0].sourceType).toBe('recorded');
     expect(result.reviewPayloads[0].sourceUri).toBe('content://recorded/review.mp4');
     expect(result.reviewPayloads[0].eventIndex).toBe(1);
-    // Correcting the last pending action resumes the bout clock.
-    expect(result.running).toBe(true);
-    // The restarted recording ran under a parked clock until the correction
-    // was saved: that dead time must be recorded as a pause span from video 0,
-    // or later events map too early into the footage.
+    // Manual clock mode returns to the match with the clock parked; the ref
+    // explicitly taps FENCE before time runs again.
+    expect(result.running).toBe(false);
+    expect(result.openPause.startVideo).toBe(0);
+    expect(result.runningAfterFence).toBe(true);
+    // The restarted recording ran under a parked clock until FENCE. That dead
+    // time must be recorded as a pause span from video 0, or later events map
+    // too early into the footage.
     expect(result.restartPauses).toHaveLength(1);
     expect(result.restartPauses[0].startVideo).toBe(0);
     expect(result.restartPauses[0].endVideo).toBeGreaterThan(0);
@@ -1436,7 +1586,7 @@ test.describe('native video review', () => {
     });
 
     expect(result.chooserVisible).toBe(true);
-    expect(result.runningAfterAnnul).toBe(true);
+    expect(result.runningAfterAnnul).toBe(false);
     expect(result.scoreBefore).toEqual({ l: 0, r: 1 });
     expect(result.scoreL).toBe(0);
     expect(result.scoreR).toBe(0);
@@ -1531,7 +1681,7 @@ test.describe('native video review', () => {
     expect(result.editId).toBeNull();
   });
 
-  test('correcting the last pending action resumes the match clock', async ({ page }) => {
+  test('correcting the last pending action keeps the manual clock halted', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);
 
@@ -1561,7 +1711,7 @@ test.describe('native video review', () => {
     });
 
     expect(result.runningDuringCorrection).toBe(false);
-    expect(result.runningAfterCorrection).toBe(true);
+    expect(result.runningAfterCorrection).toBe(false);
   });
 
   test('review opens the latest pending action by bout time, not array order', async ({ page }) => {
@@ -1669,7 +1819,7 @@ test.describe('native video review', () => {
     expect(result.payloads[0].eventVideoTime).toBeCloseTo(15, 1); // bout 30 - segment start 15
   });
 
-  test('exiting a review of stored footage resumes the bout clock', async ({ page }) => {
+  test('exiting a review of stored footage keeps the manual clock halted', async ({ page }) => {
     await page.goto(ANDROID_APP_PATH);
     await startMatch(page);
 
@@ -1705,7 +1855,7 @@ test.describe('native video review', () => {
     });
 
     expect(result.stoppedDuringReview).toBe(true); // clock parked while reviewing
-    expect(result.runningAfterKeep).toBe(true);    // and resumes on CALL STANDS
+    expect(result.runningAfterKeep).toBe(false);   // and waits for explicit FENCE
   });
 
   test('status messages surface as a toast when the drawer is closed', async ({ page }) => {
@@ -1814,7 +1964,7 @@ test.describe('native video review', () => {
     });
 
     expect(result.reviewLaunches).toBe(0); // decided -> back to the match, no auto-reopen
-    expect(result.running).toBe(true);
+    expect(result.running).toBe(false);
     expect(result.stale.startedFromRecording).toBe(false);
     expect(result.stale.cachedSource).toBeNull();
   });
