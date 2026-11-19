@@ -198,7 +198,8 @@ body.android-native-preview .timer-num{text-shadow:0 2px 8px #000}
 .simple-controls.on{display:grid}
 .simple-btn{padding:10px 7px;border-radius:8px;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#fff;border:1px solid rgba(255,255,255,0.2);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .simple-hit-left{background:#0a5fa8}.simple-hit-right{background:#a8270a}
-.simple-off{background:#8a5300}.simple-review{background:#124f55}.simple-undo{background:#272d39}
+.simple-off{background:#8a5300}.simple-review{background:#124f55}.simple-simul{background:#1e3a8a}.simple-undo{background:#272d39}
+.simple-controls .simple-undo{grid-column:2}
 .complex-hidden{display:none!important}
 .manual-clock .cards-strip{top:43px;justify-content:center;padding:0 96px;z-index:11}
 .manual-clock .cards-l,.manual-clock .cards-r{display:none}
@@ -392,6 +393,14 @@ body.android-native-preview #import-preview{display:none!important}
           <button class="chip" data-group="fmt" data-val="poule">POULE</button>
         </div>
       </div>
+      <div class="opt-row">
+        <span class="opt-label">TOUCHES</span>
+        <div class="chip-row">
+          <button class="chip" data-group="max" data-val="5">5</button>
+          <button class="chip" data-group="max" data-val="10">10</button>
+          <button class="chip active" data-group="max" data-val="15">15</button>
+        </div>
+      </div>
     </div>
     <div class="setup-btns">
       <button class="rnd rnd-start" id="btn-start">▶ CREATE BOUT</button>
@@ -524,8 +533,9 @@ body.android-native-preview #import-preview{display:none!important}
       <button class="simple-btn simple-review" id="simple-review">REVIEW</button>
       <button class="simple-btn simple-hit-right" id="simple-right-hit">RIGHT HIT</button>
       <button class="simple-btn simple-off" id="simple-left-off">LEFT OFF</button>
-      <button class="simple-btn simple-undo" id="simple-undo">UNDO</button>
+      <button class="simple-btn simple-simul" id="simple-simul">SIMUL</button>
       <button class="simple-btn simple-off" id="simple-right-off">RIGHT OFF</button>
+      <button class="simple-btn simple-undo" id="simple-undo">UNDO</button>
     </div>
     <!-- Pause / resume -->
     <button class="mid-btn" id="pause-btn">HALT</button>
@@ -732,6 +742,7 @@ const ACTIONS = {
   121:{id:121,label:'Remise',           emoji:'↩️', side:'L',isHit:true},
   122:{id:122,label:'Continuation',     emoji:'🔁', side:'L',isHit:true},
   123:{id:123,label:'Simultaneous',     emoji:'⚖️', side:'L',isHit:false},
+  124:{id:124,label:'Simultaneous',     emoji:'⚖️', side:'C',isHit:false},
   // Left — off-target / cards
   140:{id:140,label:'Off-Target',       emoji:'🟡', side:'L',isHit:false},
   141:{id:141,label:'Out of Bounds',    emoji:'⬛', side:'L',isHit:false},
@@ -754,6 +765,7 @@ const ACTIONS = {
   221:{id:221,label:'Remise',           emoji:'↩️', side:'R',isHit:true},
   222:{id:222,label:'Continuation',     emoji:'🔁', side:'R',isHit:true},
   223:{id:223,label:'Simultaneous',     emoji:'⚖️', side:'R',isHit:false},
+  224:{id:224,label:'Simultaneous',     emoji:'⚖️', side:'C',isHit:false},
   // Right — off-target / cards
   240:{id:240,label:'Off-Target',       emoji:'🟡', side:'R',isHit:false},
   241:{id:241,label:'Out of Bounds',    emoji:'⬛', side:'R',isHit:false},
@@ -1241,7 +1253,36 @@ function clearStoredMatches() {
   writeIndex([]);
 }
 
+function defaultMaxScoreForFormat(format) {
+  return format === 'poule' ? 5 : 15;
+}
+
+function matchMaxScore(match) {
+  const n = Number(match && match.maxScore);
+  if (Number.isFinite(n) && n > 0) return n;
+  return defaultMaxScoreForFormat(match && match.format);
+}
+
+function hpFromScores(scoreL, scoreR, maxScore) {
+  const max = Math.max(1, Number(maxScore) || 15);
+  return {
+    hpL: Math.max(0, 100 * (1 - (Number(scoreR) || 0) / max)),
+    hpR: Math.max(0, 100 * (1 - (Number(scoreL) || 0) / max)),
+  };
+}
+
+function syncHpFromScores(target) {
+  if (!target) return;
+  const hp = hpFromScores(target.scoreL, target.scoreR, matchMaxScore(target));
+  target.hpL = hp.hpL;
+  target.hpR = hp.hpR;
+}
+
 function newMatchState(cfg) {
+  const format = cfg.format || 'DE';
+  const maxScore = Number.isFinite(Number(cfg.maxScore)) && Number(cfg.maxScore) > 0
+    ? Number(cfg.maxScore)
+    : defaultMaxScoreForFormat(format);
   return {
     matchId: uuid(),
     clientId: clientId(),
@@ -1251,7 +1292,8 @@ function newMatchState(cfg) {
     fencerRId: cfg.fencerRId || null,
     captureMode: cfg.mode || 'simple',
     weapon: cfg.weapon || 'foil',
-    format: cfg.format || 'DE',
+    format,
+    maxScore,
     totalPeriods: cfg.periods || 1,
     periodDuration: cfg.duration * 60 || 180,
     period: 1,
@@ -1710,7 +1752,11 @@ function loadLibraryMatch(id) {
     return;
   }
   M = match;
-  if (!M.captureMode) M.captureMode = 'complex';
+  if (!M.captureMode) M.captureMode = 'simple';
+  if (!Number.isFinite(Number(M.maxScore)) || Number(M.maxScore) <= 0) {
+    M.maxScore = defaultMaxScoreForFormat(M.format);
+  }
+  syncHpFromScores(M);
   refreshHUD();
   updateCaptureModeUI();
   document.getElementById('hud-name-l').textContent = M.nameL;
@@ -2085,7 +2131,7 @@ function closePie(side, resume = true){
 let _pendingAction = null;
 
 // Actions where Hit/Off-Target doesn't apply — just a plain confirm
-const NO_HIT_CHOICE = new Set([1, 2, 3, 124, 224, 190, 191, 290, 291]);
+const NO_HIT_CHOICE = new Set([1, 2, 3, 123, 124, 223, 224, 190, 191, 290, 291]);
 
 function showConfirm(side, actionId) {
   if (actionId === 3) {
@@ -2363,6 +2409,17 @@ function recordSimpleOutcome(side, outcome) {
   setOverlayStatus(`${side === 'L' ? M.nameL : M.nameR} ${hit ? 'hit' : 'off target'} recorded. Tap FENCE to restart time.`, false);
 }
 
+function recordSimpleSimultaneous() {
+  if (!M || M.finished) return;
+  stopTimer();
+  doConfirm('C', 124, false, {
+    entryMode: 'simple',
+    outcome: 'simultaneous',
+    callClass: 'unknown',
+  });
+  setOverlayStatus('Simultaneous — no score. Tap FENCE to restart time.', false);
+}
+
 function undoLastEvent() {
   if (!M || M.finished || !Array.isArray(M.events) || !M.events.length) return;
   stopTimer();
@@ -2385,6 +2442,9 @@ document.getElementById('simple-left-off').addEventListener('touchend', e => {
 }, {passive:false});
 document.getElementById('simple-right-off').addEventListener('touchend', e => {
   e.preventDefault(); recordSimpleOutcome('R', 'offTarget');
+}, {passive:false});
+document.getElementById('simple-simul').addEventListener('touchend', e => {
+  e.preventDefault(); recordSimpleSimultaneous();
 }, {passive:false});
 document.getElementById('simple-review').addEventListener('touchend', e => {
   e.preventDefault(); stopTimer(); showConfirm('L', 3);
@@ -2480,23 +2540,24 @@ function doConfirm(side, actionId, isHit, meta = {}) {
 
   if (action) {
     if (scored) {
-      if (side === 'L') { M.scoreL++; M.hpR = Math.max(0, M.hpR - 10); }
-      else              { M.scoreR++; M.hpL = Math.max(0, M.hpL - 10); }
+      if (side === 'L') M.scoreL++;
+      else              M.scoreR++;
     }
     if (actionId === 190 || actionId === 191) {
       M.cardsL.push(action.emoji);
-      if (actionId === 191) { M.scoreR++; M.hpL = Math.max(0, M.hpL - 5); }
+      if (actionId === 191) M.scoreR++;
     }
     if (actionId === 290 || actionId === 291) {
       M.cardsR.push(action.emoji);
-      if (actionId === 291) { M.scoreL++; M.hpR = Math.max(0, M.hpR - 5); }
+      if (actionId === 291) M.scoreL++;
     }
   }
+  syncHpFromScores(M);
 
   refreshHUD();
 
-  // Win condition: DE ends at 15 touches; poule at 5
-  const maxScore = M.format === 'poule' ? 5 : 15;
+  // Win condition uses configurable maxScore (5 / 10 / 15, etc.)
+  const maxScore = matchMaxScore(M);
   if (!isImportedVideoAnnotationMode() && (M.scoreL >= maxScore || M.scoreR >= maxScore)) { finishMatch(); return; }
   resumeAfterEntryIfNeeded();
 }
@@ -3432,18 +3493,21 @@ function replayStateAt(boutTime, events) {
   (events || M?.events || []).forEach(ev => {
     if (overlayEventTime(ev) > boutTime) return;
     if (ev.isHit) {
-      if (ev.side === 'L') { state.scoreL++; state.hpR = Math.max(0, state.hpR - 10); }
-      if (ev.side === 'R') { state.scoreR++; state.hpL = Math.max(0, state.hpL - 10); }
+      if (ev.side === 'L') state.scoreL++;
+      if (ev.side === 'R') state.scoreR++;
     }
     if (ev.actionId === 190 || ev.actionId === 191) {
       state.cardsL.push(ev.emoji);
-      if (ev.actionId === 191) { state.scoreR++; state.hpL = Math.max(0, state.hpL - 5); }
+      if (ev.actionId === 191) state.scoreR++;
     }
     if (ev.actionId === 290 || ev.actionId === 291) {
       state.cardsR.push(ev.emoji);
-      if (ev.actionId === 291) { state.scoreL++; state.hpR = Math.max(0, state.hpR - 5); }
+      if (ev.actionId === 291) state.scoreL++;
     }
   });
+  const hp = hpFromScores(state.scoreL, state.scoreR, matchMaxScore(M));
+  state.hpL = hp.hpL;
+  state.hpR = hp.hpR;
   return state;
 }
 
@@ -4784,7 +4848,13 @@ window.addEventListener('resize', checkOrientation);
 checkOrientation();
 
 // ── Settings state ────────────────────────────────────────────────────────────
-const CFG = { weapon:'foil', periods:1, duration:3, format:'DE', mode:'simple' };
+const CFG = { weapon:'foil', periods:1, duration:3, format:'DE', maxScore:15, mode:'simple' };
+
+function setActiveChip(group, val) {
+  document.querySelectorAll(`.chip[data-group="${group}"]`).forEach(b => {
+    b.classList.toggle('active', String(b.dataset.val) === String(val));
+  });
+}
 
 // ── Chip selector setup ───────────────────────────────────────────────────────
 document.querySelectorAll('.chip').forEach(btn => {
@@ -4797,7 +4867,12 @@ document.querySelectorAll('.chip').forEach(btn => {
     if (group === 'wpn')  CFG.weapon  = val;
     if (group === 'per')  CFG.periods  = +val;
     if (group === 'dur')  CFG.duration = +val;
-    if (group === 'fmt')  CFG.format   = val;
+    if (group === 'fmt') {
+      CFG.format = val;
+      CFG.maxScore = defaultMaxScoreForFormat(val);
+      setActiveChip('max', CFG.maxScore);
+    }
+    if (group === 'max')  CFG.maxScore = +val;
     if (group === 'mode') CFG.mode     = val;
   }, {passive:false});
 });
