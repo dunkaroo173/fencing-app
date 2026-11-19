@@ -21,13 +21,20 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-const startMatch = async (page: Page, opts: { fence?: boolean; mode?: 'simple' | 'complex' } = {}) => {
+const startMatch = async (page: Page, opts: {
+  fence?: boolean;
+  mode?: 'simple' | 'complex';
+  maxScore?: 5 | 10 | 15;
+} = {}) => {
   await page.locator('#name-l').fill('LEFT');
   await page.locator('#name-r').fill('RIGHT');
   const isAndroidApp = page.url().includes('/ufl-android/');
   const mode = opts.mode || (isAndroidApp ? 'complex' : null);
   if (mode) {
     await page.locator(`[data-group="mode"][data-val="${mode}"]`).tap();
+  }
+  if (opts.maxScore) {
+    await page.locator(`[data-group="max"][data-val="${opts.maxScore}"]`).tap();
   }
   await page.locator('#btn-start').tap();
   await expect.poll(() => page.evaluate(() => typeof M !== 'undefined' && !!M), { timeout: 5000 }).toBe(true);
@@ -261,7 +268,9 @@ test.describe('android live UX foundation', () => {
     await page.goto(ANDROID_APP_PATH);
     await expect(page.locator('.mode-panel')).toBeVisible();
     await expect(page.locator('.mode-chip[data-val="simple"]')).toBeVisible();
+    await expect(page.locator('.mode-chip[data-val="simple"]')).toHaveClass(/active/);
     await expect(page.locator('.mode-chip[data-val="complex"]')).toBeVisible();
+    await expect(page.locator('[data-group="max"][data-val="15"]')).toHaveClass(/active/);
     await expect(page.locator('#btn-register-profile')).toBeVisible();
 
     const setupOverflow = await page.locator('#s-setup').evaluate(el => getComputedStyle(el).overflowY);
@@ -394,6 +403,88 @@ test.describe('android live UX foundation', () => {
     })));
     expect(events.at(-1)).toMatchObject({ actionId: 240, side: 'R', entryMode: 'simple', outcome: 'offTarget', isHit: false });
     expect(await page.evaluate(() => M.running)).toBe(false);
+  });
+
+  test('simple SIMUL records no-score simultaneous and leaves scores unchanged', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page, { mode: 'simple' });
+
+    await page.locator('#simple-simul').tap();
+    const data = await page.evaluate(() => ({
+      scoreL: M.scoreL,
+      scoreR: M.scoreR,
+      hpL: M.hpL,
+      hpR: M.hpR,
+      event: M.events.at(-1),
+      running: M.running,
+    }));
+    expect(data.scoreL).toBe(0);
+    expect(data.scoreR).toBe(0);
+    expect(data.hpL).toBe(100);
+    expect(data.hpR).toBe(100);
+    expect(data.event).toMatchObject({
+      actionId: 124,
+      side: 'C',
+      entryMode: 'simple',
+      outcome: 'simultaneous',
+      isHit: false,
+    });
+    expect(data.running).toBe(false);
+  });
+
+  test('health bar tracks configurable maxScore for 10-touch and 15-touch bouts', async ({ page }) => {
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page, { mode: 'simple', maxScore: 10, fence: false });
+
+    const tenTouch = await page.evaluate(() => ({ maxScore: M.maxScore, format: M.format }));
+    expect(tenTouch).toMatchObject({ maxScore: 10, format: 'DE' });
+
+    for (let i = 0; i < 9; i++) {
+      await page.locator('#resume-btn').tap();
+      await page.locator('#simple-left-hit').tap();
+    }
+    const afterNine = await page.evaluate(() => ({
+      scoreL: M.scoreL,
+      hpR: M.hpR,
+      finished: M.finished,
+      hpWidth: document.getElementById('hud-hp-r')!.style.width,
+    }));
+    expect(afterNine.scoreL).toBe(9);
+    expect(afterNine.finished).toBe(false);
+    expect(afterNine.hpR).toBeCloseTo(10, 5);
+    expect(parseFloat(afterNine.hpWidth)).toBeCloseTo(10, 5);
+
+    await page.locator('#resume-btn').tap();
+    await page.locator('#simple-left-hit').tap();
+    const afterTen = await page.evaluate(() => ({
+      scoreL: M.scoreL,
+      hpR: M.hpR,
+      finished: M.finished,
+      hpWidth: document.getElementById('hud-hp-r')!.style.width,
+    }));
+    expect(afterTen.scoreL).toBe(10);
+    expect(afterTen.hpR).toBe(0);
+    expect(parseFloat(afterTen.hpWidth)).toBe(0);
+    expect(afterTen.finished).toBe(true);
+
+    await page.goto(ANDROID_APP_PATH);
+    await startMatch(page, { mode: 'simple', maxScore: 15, fence: false });
+    for (let i = 0; i < 10; i++) {
+      await page.locator('#resume-btn').tap();
+      await page.locator('#simple-left-hit').tap();
+    }
+    const fifteenTouch = await page.evaluate(() => ({
+      scoreL: M.scoreL,
+      maxScore: M.maxScore,
+      hpR: M.hpR,
+      finished: M.finished,
+      hpWidth: document.getElementById('hud-hp-r')!.style.width,
+    }));
+    expect(fifteenTouch.maxScore).toBe(15);
+    expect(fifteenTouch.scoreL).toBe(10);
+    expect(fifteenTouch.finished).toBe(false);
+    expect(fifteenTouch.hpR).toBeCloseTo(100 * (5 / 15), 5);
+    expect(parseFloat(fifteenTouch.hpWidth)).toBeCloseTo(100 * (5 / 15), 4);
   });
 
   test('simple live overturn uses simple corrected-call buttons', async ({ page }) => {
